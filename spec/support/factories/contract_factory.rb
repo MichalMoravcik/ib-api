@@ -39,17 +39,17 @@ module IB
 
       def create_cfd(symbol: 'AAPL', **attrs)
         attributes = { symbol: symbol, sec_type: 'CFD', exchange: 'SMART', currency: 'USD' }.merge(attrs)
-        IB::CFD.new(attributes)
+        IB::Contract.new(attributes)
       end
 
       def create_commodity(symbol: 'XAUUSD', **attrs)
         attributes = { symbol: symbol, sec_type: 'CMDTY', exchange: 'SMART', currency: 'USD' }.merge(attrs)
-        IB::Commodity.new(attributes)
+        IB::Contract.new(attributes)
       end
 
       def create_bond(symbol: 'US30Y', **attrs)
         attributes = { symbol: symbol, sec_type: 'BOND', exchange: 'NYSE', currency: 'USD' }.merge(attrs)
-        IB::Bond.new(attributes)
+        IB::Contract.new(attributes)
       end
 
       def create_forex(symbol: 'EUR', **attrs)
