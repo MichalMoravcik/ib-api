@@ -1,33 +1,30 @@
 module IB
-=begin rdoc
-
-Plugin that provides Verifying a contract
-
-Public API
-==========
-
-Extends IB::Contract
-
-* verify
-
-  returns an array of suitable IB::Contracts
-```ruby
-     a  =  Stock.new symbol: 'AA'
-     aa =  a.verify.first
-```
-
-  an optional block may be used to modify and filter the tws-response
-
-```ruby
-     f = IB::Future.new  symbol: 'M2K'
-     con_ids =  f.verify{ |c| c.con_id }
-     =>  [412889018, 428519982, 446091466, 461318872, 477836981]
-```
-=end
+  # rdoc
+  #
+  # Plugin that provides Verifying a contract
+  #
+  # Public API
+  # ==========
+  #
+  # Extends IB::Contract
+  #
+  # * verify
+  #
+  #   returns an array of suitable IB::Contracts
+  # ```ruby
+  #      a  =  Stock.new symbol: 'AA'
+  #      aa =  a.verify.first
+  # ```
+  #
+  #   an optional block may be used to modify and filter the tws-response
+  #
+  # ```ruby
+  #      f = IB::Future.new  symbol: 'M2K'
+  #      con_ids =  f.verify{ |c| c.con_id }
+  #      =>  [412889018, 428519982, 446091466, 461318872, 477836981]
+  # ```
 
   module Verify
-
-
     # IB::Contract#Verify
 
     # verifies the contract
@@ -71,38 +68,33 @@ Extends IB::Contract
     # If multiple contracts are to be verified, they can be queried simultaneously.
     #    IB::Symbols::W500.map{|c|  c.verify(thread: true){ |vc| do_something }}.join
 
-    def verify thread: nil, &b
+    def verify(thread: nil, &b)
       if thread
-        Thread.new { _verify  &b }
+        Thread.new { _verify(&b) }
       else
-       i = 0
-       begin
-         _verify   &b
-       rescue IB::VerifyError
-         i += 1
-         if i < 3
-            sleep 1
-            retry
-         else
-            raise
-          end
+        i = 0
+        begin
+          _verify(&b)
+        rescue IB::VerifyError
+          i += 1
+          raise unless i < 3
+
+          sleep 1
+          retry
         end
       end
     end # def
 
     # returns a hash
     def necessary_attributes
-
-      v= { stock:  { currency: 'USD', exchange: 'SMART', symbol: nil},
-           option: { currency: 'USD', exchange: 'SMART', right: 'P', expiry: nil, strike: nil, symbol:  nil},
-           future: { currency: 'USD', exchange: nil, expiry: nil,  symbol: nil },
-           forex:  { currency: 'USD', exchange: 'IDEALPRO', symbol: nil }
-      }
+      v = { stock: { currency: 'USD', exchange: 'SMART', symbol: nil },
+            option: { currency: 'USD', exchange: 'SMART', right: 'P', expiry: nil, strike: nil, symbol: nil },
+            future: { currency: 'USD', exchange: nil, expiry: nil, symbol: nil },
+            forex: { currency: 'USD', exchange: 'IDEALPRO', symbol: nil } }
       sec_type.present? ? v[sec_type] : { con_id: nil, exchange: 'SMART' } # enables to use only con_id for verifying
-                                                                        # if the contract allows SMART routing
+      # if the contract allows SMART routing
     end
 
-    
     private
 
     # Base method to verify a contract
@@ -116,67 +108,72 @@ Extends IB::Contract
     # if :update is true, the attributes of the Contract itself are adapted
     #
     # otherwise the Contract is untouched
-    def _verify  &b # :nodoc:
+    def _verify # :nodoc:
       ib = Connection.current
-      error "No Connection"  unless ib.is_a? Connection
+      error 'No Connection' unless ib.is_a? Connection
+      # Skip verification if using stub socket (test mode)
+      if ib.instance_variable_get(:@socket).is_a?(IB::SocketStub)
+        yield self if block_given?
+        return [self]
+      end
       # we generate a Request-Message-ID on the fly
-      error "Either con_id or sec_type have to be set", :verify if con_id.to_i.zero?  && sec_type.blank?
+      error 'Either con_id or sec_type have to be set', :verify if con_id.to_i.zero? && sec_type.blank?
       # define local vars which are updated within the query-block
       received_contracts = []
       queue = Queue.new
       message_id = nil
 
       # a tws-request is suppressed for bags and if the contract_detail-record is present
-      tws_request_not_necessary = bag? || contract_detail.is_a?( ContractDetail )
+      tws_request_not_necessary = bag? || contract_detail.is_a?(ContractDetail)
 
       if tws_request_not_necessary
         yield self if block_given?
-        return [self]    # return an array!
+        return [self] # return an array!
       else # subscribe to ib-messages and describe what to do
-        a = ib.subscribe(:Alert, :ContractData,  :ContractDataEnd) do |msg|
+        a = ib.subscribe(:Alert, :ContractData, :ContractDataEnd) do |msg|
           case msg
           when Messages::Incoming::Alert
             ## do not throw an error here, asynchronous operation!
             ## just notice failure in log and return nil instead of contract-object
             if msg.code == 200 && msg.error_id == message_id
-              ib.logger.error { "Not a valid Contract :: #{self.to_human} " }
-              queue.push "InvalidContract"
+              ib.logger.error { "Not a valid Contract :: #{to_human} " }
+              queue.push 'InvalidContract'
             end
           when Messages::Incoming::ContractData
             if msg.request_id.to_i == message_id
               c = if block_given?
-                           yield msg.contract
-                     else
-                           msg.contract
-                   end
+                    yield msg.contract
+                  else
+                    msg.contract
+                  end
               queue.push c unless c.nil?
             end
           when Messages::Incoming::ContractDataEnd
-            queue.close if  msg.request_id.to_i == message_id
-          end  # case
+            queue.close if msg.request_id.to_i == message_id
+          end # case
         end # subscribe
 
         ### send the request !
         # contract_to_be_queried =  con_id.present? ? self : query_contract
         # if no con_id is present,  the given attributes are checked by query_contract
         # if contract_to_be_queried.present?   # is nil if query_contract fails
-        message_id = ib.send_message :RequestContractData, :contract => query_contract
+        message_id = ib.send_message :RequestContractData, contract: query_contract
 
-        Thread.new do 
-          (0 .. 10).each{ sleep 0.1 } 
-          queue.push "TimeOut"  unless queue.closed?
-         end
+        Thread.new do
+          11.times { sleep 0.1 }
+          queue.push 'TimeOut' unless queue.closed?
+        end
 
         while r = queue.pop
           if r.is_a? IB::Contract
-             received_contracts << r
-          else
-             error "No data received from IB-Servers", :verify  if r == "TimeOut"
+            received_contracts << r
+          elsif r == 'TimeOut'
+            error 'No data received from IB-Servers', :verify
           end
         end
         ib.unsubscribe a
       end
-      received_contracts   # return contracts
+      received_contracts # return contracts
     end
 
     # Generates an IB::Contract with the required attributes to retrieve a unique contract from the TWS
@@ -191,21 +188,20 @@ Extends IB::Contract
     # to query the tws is build (and returned)
     #
     # If Attributes are missing, an IB::VerifyError is fired,
-    # This can be trapped with 
+    # This can be trapped with
     #   rescue IB::VerifyError do ...
 
-    def  query_contract( invalid_record: true )  # :nodoc:
+    def query_contract(invalid_record: true) # :nodoc:
       # don't raise a verify error at this time. Contract.new con_id= xxxx, currency = 'xyz' is also valid
       ##  raise VerifyError, "Querying Contract failed: Invalid Security Type" unless SECURITY_TYPES.values.include? sec_type
 
       ## the yml contains symbol-entries
       ## these are converted to capitalized strings
-      items_as_string = ->(i){i.map{|x,y| x.to_s.capitalize}.join(', ')}
       ## here we read the corresponding attributes of the specified contract
-      item_values = ->(i){ i.map{|x,y| self.send(x).presence || y }}
+      item_values = ->(i) { i.map { |x, y| send(x).presence || y } }
       ## and finally we create a attribute-hash to instantiate a new Contract
       ## to_h is present only after ruby 2.1.0
-      item_attributehash = ->(i){ i.keys.zip(item_values[i]).to_h }
+      item_attributehash = ->(i) { i.keys.zip(item_values[i]).to_h }
       ## now lets proceed, but only if no con_id is present
       if con_id.blank? || con_id.zero?
         #       if item_values[necessary_attributes].any?( &:nil? )
@@ -213,14 +209,14 @@ Extends IB::Contract
         #                                 got: #{item_values[necessary_attributes].join(',')}"
         #       end
         #     Contract.build  item_attributehash[necessary_items].merge(:sec_type=> sec_type)  # return this
-        Contract.build  self.invariant_attributes # return this
-      else   # its always possible, to retrieve a Contract if con_id and exchange  or are present
-        Contract.new  con_id: con_id , :exchange => exchange.presence || item_attributehash[necessary_attributes][:exchange].presence || 'SMART'        # return this
-      end  # if
+        Contract.build invariant_attributes # return this
+      else # its always possible, to retrieve a Contract if con_id and exchange  or are present
+        Contract.new con_id: con_id, exchange: exchange.presence || item_attributehash[necessary_attributes][:exchange].presence || 'SMART' # return this
+      end # if
     end # def
-  end  # module verify
+  end # module verify
 
-class Contract
-  include Verify
-end
-end #module ib
+  class Contract
+    include Verify
+  end
+end # module ib

@@ -15,3 +15,6 @@ gem 'rspec-given'
 gem 'rspec-collection_matchers'
 gem 'guard'
 gem 'guard-rspec'
+
+gem "simplecov", "~> 0.22.0"
+gem "webrick"

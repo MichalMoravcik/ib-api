@@ -1,14 +1,12 @@
-=begin
-
-Plugin that provides helper methods for predefined Contracts
-
-
-Public API
-==========
-
-Extends IB::Contract
-
-=end
+#
+# Plugin that provides helper methods for predefined Contracts
+#
+#
+# Public API
+# ==========
+#
+# Extends IB::Contract
+#
 
 # These modules are used to facilitate referencing of most popular IB Contracts.
 # Like pages in the TWS-GUI, they can be utilised to organise trading and research.
@@ -60,59 +58,63 @@ Extends IB::Contract
 
 module IB
   module Symbols
+    # Automatically load symbol sub-plugins when symbols plugin is activated
+    if IB::Connection.current
+      # Activate spread prototypes first since combo symbols depend on them
+      IB::Connection.current.activate_plugin 'spread-prototypes'
+
+      # Then load symbol sub-plugins
+      %i[forex futures stocks index cfd commodity options combo bonds abstract].each do |pt|
+        IB::Connection.current.activate_plugin "symbols/#{pt}"
+      end
+    end
     class Error < StandardError; end
 
-
-
     def hardcoded?
-      !self.methods.include? :yml_file
+      !methods.include? :yml_file
     end
+
     def method_missing(method, *key)
       if key.empty?
         if contracts.has_key?(method)
           contracts[method]
-          elsif methods.include?(:each) && each.methods.include?(method)
-              self.each.send method
-          else
+        elsif methods.include?(:each) && each.methods.include?(method)
+          each.send method
+        else
           error "contract #{method} not defined. Try »all« for a list of defined Contracts.", :symbol
         end
       else
-        error "method missing"
+        error 'method missing'
       end
     end
 
     def all
-      contracts.keys.sort rescue contracts.keys
+      contracts.keys.sort
+    rescue StandardError
+      contracts.keys
     end
+
     def print_all
-      puts contracts.sort.map{|x,y| [x,y.description].join(" -> ")}.join "\n"
+      puts contracts.sort.map { |x, y| [x, y.description].join(' -> ') }.join "\n"
     end
+
     def contracts
       if @contracts.present?
         @contracts
       else
-        @contracts = Hash.new
+        @contracts = {}
       end
     end
-    def [] symbol
-      if c=contracts[symbol]
-        return c
+
+    def [](symbol)
+      if c = contracts[symbol]
+        c
       else
         # symbol probably has not been predefined, tell user about it
-        file = self.to_s.split(/::/).last.downcase
+        file = to_s.split(/::/).last.downcase
         msg = "Unknown symbol :#{symbol}, please pre-define it in lib/ib/symbols/#{file}.rb"
         error msg, :symbol
       end
     end
   end
-
-
- Connection.current.activate_plugin "verify"
- Connection.current.activate_plugin "roll"
- Connection.current.activate_plugin "spread-prototypes"
- [ :forex, :futures, :stocks, :index, :cfd, :commodity, :options, :combo, :bonds, :abstract ].each do  |pt|
-    Connection.current.activate_plugin "symbols/#{pt.to_s}"
- end
-
 end
-

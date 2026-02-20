@@ -7,35 +7,43 @@ module IB
     # > nq =  IB::Symbols::Futures.nq.verify.first
     # > t= nq.roll to: '3m'
     # > puts t.as_table
-# ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-# │  Roll NQ future from Sep 24 to Dec 24 /  buy 1 <Future: NQ 20240920 USD> /  sell 1 <Future: NQ 20241220 USD  │
-# ├────────┬────────┬─────────────┬──────────┬──────────┬────────────┬───────────────┬───────┬────────┬──────────┤
-# │        │ symbol │ con_id      │ exchange │ expiry   │ multiplier │ trading-class │ right │ strike │ currency │
-# ╞════════╪════════╪═════════════╪══════════╪══════════╪════════════╪═══════════════╪═══════╪════════╪══════════╡
-# │ Spread │ NQ     │ -1201481183 │   CME    │          │     20     │               │       │        │   USD    │
-# │ Future │ NQ     │   637533450 │   CME    │ 20240920 │     20     │      NQ       │       │        │   USD    │
-# │ Future │ NQ     │   563947733 │   CME    │ 20241220 │     20     │      NQ       │       │        │   USD    │
-# └────────┴────────┴─────────────┴──────────┴──────────┴────────────┴───────────────┴───────┴────────┴──────────┘
+    # ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+    # │  Roll NQ future from Sep 24 to Dec 24 /  buy 1 <Future: NQ 20240920 USD> /  sell 1 <Future: NQ 20241220 USD  │
+    # ├────────┬────────┬─────────────┬──────────┬──────────┬────────────┬───────────────┬───────┬────────┬──────────┤
+    # │        │ symbol │ con_id      │ exchange │ expiry   │ multiplier │ trading-class │ right │ strike │ currency │
+    # ╞════════╪════════╪═════════════╪══════════╪══════════╪════════════╪═══════════════╪═══════╪════════╪══════════╡
+    # │ Spread │ NQ     │ -1201481183 │   CME    │          │     20     │               │       │        │   USD    │
+    # │ Future │ NQ     │   637533450 │   CME    │ 20240920 │     20     │      NQ       │       │        │   USD    │
+    # │ Future │ NQ     │   563947733 │   CME    │ 20241220 │     20     │      NQ       │       │        │   USD    │
+    # └────────┴────────┴─────────────┴──────────┴──────────┴────────────┴───────────────┴───────┴────────┴──────────┘
     # > t= nq.roll expiry: 202412
     # > puts t.to_human
     # <Roll NQ future from Sep 24 to Dec 24 /  buy 1 <Future: NQ 20240920 USD> /  sell 1 <Future: NQ 20241220 USD>
 
-
     def roll **args
-      print_expiry = ->(f){ Date.parse(f.last_trading_day).strftime('%b %y') }
-      error "specify expiry to roll a future" if args.empty?
-      args[:to] = args[:expiry] if args[:expiry].present?  && args[:expiry].to_s =~ /[mwMW]$/
-      args[:expiry]= IB::Spread.transform_distance( expiry, args.delete(:to  )) if args[:to].present?
+      print_expiry = lambda { |f|
+        if f.last_trading_day.present?
+          begin
+            Date.parse(f.last_trading_day).strftime('%b %y')
+          rescue ArgumentError
+            f.expiry
+          end
+        else
+          f.expiry
+        end
+      }
+      error 'specify expiry to roll a future' if args.empty?
+      args[:to] = args[:expiry] if args[:expiry].present? && args[:expiry].to_s =~ /[mwMW]$/
+      args[:expiry] = IB::Spread.transform_distance(expiry, args.delete(:to)) if args[:to].present?
 
-      new_future =  merge( **args ).verify.first
-      error "Cannot roll future; target is no IB::Contract" unless new_future.is_a? IB::Future
+      new_future =  merge(**args).verify.first
+      error 'Cannot roll future; target is no IB::Contract' unless new_future.is_a? IB::Future
       target = IB::Spread.new exchange: exchange, symbol: symbol, currency: currency,
-      description: "<Roll #{symbol} future from #{print_expiry[self]} to #{print_expiry[new_future]}"
-      target.add_leg self, action:  :sell
+                              description: "<Roll #{symbol} future from #{print_expiry[self]} to #{print_expiry[new_future]}"
+      target.add_leg self, action: :sell
       target.add_leg new_future, action: :buy
     end
   end
-
 
   module RollOption
     # helper method to roll an existing short-poption
@@ -57,19 +65,21 @@ module IB
     #   `r= Symbols::Options.rut.merge(strike: 2000).next_expiry.roll( expiry:  '+1m' ) `
 
     def roll **args
-      error "specify strike and expiry to roll option" if args.empty?
-      args[:to] = args[:expiry] if args[:expiry].present?  && args[:expiry].to_s =~ /[mwMW]$/
-      args[:expiry]= IB::Spread.transform_distance( expiry, args.delete(:to  )) if args[:to].present?
+      error 'specify strike and expiry to roll option' if args.empty?
+      args[:to] = args[:expiry] if args[:expiry].present? && args[:expiry].to_s =~ /[mwMW]$/
+      args[:expiry] = IB::Spread.transform_distance(expiry, args.delete(:to)) if args[:to].present?
 
-      new_option =  merge( ** args ).then{ | y | y.next_expiry{ y.expiry } }
+      new_option = merge(** args).then { |y| y.next_expiry { y.expiry } }
 
-      myself =  con_id.to_i.zero? ? self.verify.first  : self
-      error "Cannot roll option; target is no IB::Contract" unless new_option.is_a? IB::Option
-      error "Cannot roll option; Option cannot be verified" unless myself.is_a? IB::Option
+      myself = con_id.to_i.zero? ? verify.first : self
+      error 'Cannot roll option; target is no IB::Contract' unless new_option.is_a? IB::Option
+      error 'Cannot roll option; Option cannot be verified' unless myself.is_a? IB::Option
       target = IB::Spread.new exchange: exchange, symbol: symbol, currency: currency
-      target.add_leg myself, action:  :buy
+      target.add_leg myself, action: :buy
       target.add_leg new_option, action: :sell
-      target.description= target.description.sub(/added <Option:/, 'rolling <Option:').then{|y| y.gsub /added <Option/, 'to <Option'}
+      target.description = target.description.sub(/added <Option:/, 'rolling <Option:').then do |y|
+        y.gsub(/added <Option/, 'to <Option')
+      end
       target
     end
   end
