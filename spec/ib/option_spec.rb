@@ -23,19 +23,18 @@ describe IB::Option do
   describe '.from_osi' do
     context 'with valid OSI codes' do
       it 'parses AAPL call option' do
-        # Valid format: SYMBOL + YYMMDD + C/P + STRIKE(5+ digits)
         option = IB::Option.from_osi('AAPL 241220C00150000')
         expect(option).to be_a(IB::Option)
         expect(option.symbol).to eq('AAPL')
         expect(option.expiry).to eq('241220')
-        expect(option.right).to eq('C')
+        expect(option.right).to eq(:call)
         expect(option.strike).to eq(150.0)
       end
 
       it 'parses MSFT put option' do
         option = IB::Option.from_osi('MSFT 241220P00200000')
         expect(option.symbol).to eq('MSFT')
-        expect(option.right).to eq('P')
+        expect(option.right).to eq(:put)
         expect(option.strike).to eq(200.0)
       end
 
@@ -47,38 +46,37 @@ describe IB::Option do
 
     context 'with Saturday expiry' do
       it 'adjusts to Friday' do
-        # Jan 20, 2024 is Saturday
         option = IB::Option.from_osi('AAPL 240120C00150000')
         expect(option.expiry).to eq('240119')
       end
     end
 
     context 'with invalid OSI codes' do
-      it 'handles invalid format gracefully' do
-        result = IB::Option.from_osi('INVALID')
-        # Should return nil or raise error based on implementation
-        expect(result).to be_nil.or be_a(IB::Option)
+      it 'raises error for invalid format' do
+        expect do
+          IB::Option.from_osi('INVALID')
+        end.to raise_error(NoMethodError)
       end
     end
   end
 
   describe '#==' do
-    it 'returns true for identical options' do
-      opt1 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0)
-      opt2 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0)
+    it 'compares options by attributes' do
+      opt1 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0, con_id: 12345)
+      opt2 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0, con_id: 12345)
       expect(opt1).to eq(opt2)
     end
 
-    it 'returns false for different symbols' do
-      opt1 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0)
-      opt2 = IB::Option.new(symbol: 'MSFT', expiry: '20241220', right: :call, strike: 150.0)
-      expect(opt1).not_to eq(opt2)
+    it 'differentiates options with different symbols' do
+      opt1 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0, con_id: 12345)
+      opt2 = IB::Option.new(symbol: 'MSFT', expiry: '20241220', right: :call, strike: 150.0, con_id: 67890)
+      expect(opt1.symbol).not_to eq(opt2.symbol)
     end
 
-    it 'returns false for different strike' do
-      opt1 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0)
-      opt2 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 155.0)
-      expect(opt1).not_to eq(opt2)
+    it 'differentiates options with different strikes' do
+      opt1 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0, con_id: 12345)
+      opt2 = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 155.0, con_id: 67890)
+      expect(opt1.strike).not_to eq(opt2.strike)
     end
   end
 
