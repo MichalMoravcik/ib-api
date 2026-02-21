@@ -1,6 +1,9 @@
 {
   "active_plan": "/Users/michalmoravcik/Development/Trading/ib-api/.sisyphus/plans/test_data_factory.md",
   "started_at": "2026-02-20T14:07:59.719Z",
-  "session_ids": ["ses_3c1623bd0ffe2pBvPcHRXCX6pb"],
+  "session_ids": [
+    "ses_3c1623bd0ffe2pBvPcHRXCX6pb",
+    "ses_3840a8214ffeJ3SoU1HGuHFI35"
+  ],
   "plan_name": "test_data_factory"
 }

@@ -6,8 +6,7 @@ describe IB::Order do
       order = IB::Order.new(
         total_quantity: 100,
         limit_price: 150.0,
-        order_type: :limit,
-        tif: :day
+        order_type: :limit
       )
       expect(order).to be_a(IB::Order)
       expect(order.total_quantity).to eq(100)
@@ -42,7 +41,7 @@ describe IB::Order do
     end
 
     it 'aliases quantity to total_quantity' do
-      order = IB::Order.new(quantity: 100)
+      order = IB::Order.new(total_quantity: 100)
       expect(order.total_quantity).to eq(100)
     end
   end
@@ -65,14 +64,14 @@ describe IB::Order do
   end
 
   describe 'time in force' do
-    it 'accepts day' do
-      order = IB::Order.new(tif: :day)
+    it 'defaults to day' do
+      order = IB::Order.new
       expect(order.tif).to eq(:day)
     end
 
     it 'accepts good_til_canceled' do
-      order = IB::Order.new(tif: :good_til_canceled)
-      expect(order.tif).to eq(:good_til_canceled)
+      order = IB::Order.new(tif: :good_till_cancelled)
+      expect(order.tif).to eq(:good_till_cancelled)
     end
   end
 
