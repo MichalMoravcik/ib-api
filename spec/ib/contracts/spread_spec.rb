@@ -10,16 +10,15 @@ end
 RSpec.shared_examples 'serialize two Combo-legs' do
 
     it "the con_id's are serialized" do
-      pending 'serialize_combo_legs signature changed - returns 3 elements, test expects 5'
       con_ids =  subject.contract.combo_legs.map &:con_id
       buy_and_sell =  subject.contract.combo_legs.map{|y| y.action.to_s.upcase}
       exchanges =  subject.contract.combo_legs.map &:exchange
-      expect( subject.serialize_combo_legs(subject.contract).size ).to eq 5
+      expect( subject.serialize_combo_legs(subject.contract).size ).to eq 3
       expect( subject.serialize_combo_legs(subject.contract).flatten.slice(1,8 )).to eq [ con_ids[0],
                                                                         1,                # quantity
                                                                         buy_and_sell[0],
                                                                         exchanges[0],0,0,"",-1 ]
-      expect( subject.serialize_combo_legs.flatten.slice(9,8 )).to eq [ con_ids[1],
+      expect( subject.serialize_combo_legs(subject.contract).flatten.slice(9,8 )).to eq [ con_ids[1],
                                                                         1,                # quantity
                                                                         buy_and_sell[1],
                                                                         exchanges[1],0,0,"",-1 ]
@@ -29,7 +28,7 @@ RSpec.shared_examples 'serialize two Combo-legs' do
 end
 
 RSpec.describe "IB::Spread" do
-  let( :the_option ) { IB::Symbols::Options.stoxx.merge( strike: 5000 ) }
+  let( :the_option ) { IB::Symbols::Options.stoxx.merge( strike: 5000, con_id: 999_999 ) }
   let( :the_spread ) { IB::Calendar.fabricate IB::Symbols::Futures.nq, '3m' }
 
   before(:all) do
@@ -66,9 +65,8 @@ RSpec.describe "IB::Spread" do
         it_behaves_like "serialize limit order fields"
         it_behaves_like "serialize two Combo-legs"
         it 'serializes combo legs with leg prices and combo params' do
-          pending 'serialize_combo_legs signature changed - returns 3 elements, test expects 5'
           expect( subject.serialize_combo_legs(the_spread) ).to eq [ the_spread.serialize_legs,
-                                                           0 ,[], 0 , [] ]
+                                                                   0 , 0 ]
                                                    # leg-prices  + combo-params
         end
 
@@ -86,7 +84,6 @@ RSpec.describe "IB::Spread" do
     end
 
     it "remove a leg" do
-    pending 'remove_leg by contract verifies via network causing unexpected deletions in test env'
     # non existing leg
     expect{ subject.remove_leg( the_option  )  }.not_to  change{ subject.legs.size }
 
