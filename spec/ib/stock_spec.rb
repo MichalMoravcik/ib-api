@@ -1,6 +1,6 @@
 require "main_helper"
 
-describe  IB::Stock do
+describe  IB::Stock, :integration, :connected do
   before(:all) do
     establish_connection
     ib = IB::Connection.current

@@ -1,6 +1,6 @@
 require 'order_helper'
 
-describe 'Order placement via Account'  do # :connected => true, :integration => true do
+describe 'Order placement via Account', :integration, :connected, :slow do
   let(:contract_type) { :stock }
 
   before(:all) do

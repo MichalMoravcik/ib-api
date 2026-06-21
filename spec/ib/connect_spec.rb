@@ -1,7 +1,7 @@
 require "main_helper"
 require 'rspec/given'
 
-describe "Connect to Gateway or TWS"  do
+describe "Connect to Gateway or TWS", :integration, :connected do
   before(:all){ establish_connection }
 
   after(:all) { close_connection }
