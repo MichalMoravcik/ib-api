@@ -132,7 +132,7 @@ module IB
                 client_socket.puts("#{response}| 0|")
               end
             end
-          rescue EOFError, Errno::EPIPE, Errno::ECONNRESET
+          rescue EOFError, Errno::EPIPE, Errno::ECONNRESET, IOError
           ensure
             client_socket.close rescue nil
             @clients.delete(client_socket)

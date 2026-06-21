@@ -10,7 +10,7 @@ describe 'Order-Flow', connected: true, integration: true, slow: true do
     ib.activate_plugin :symbols, :order_prototypes
   end
 
-  context 'Trading Ford', if: :forex_trading_hours, focus: true do
+  context 'Trading Ford', if: :forex_trading_hours do
     before(:all) do
       ib = IB::Connection.current
       @initial_order_id = ib.next_local_id

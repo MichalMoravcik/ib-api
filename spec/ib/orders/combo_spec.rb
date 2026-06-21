@@ -30,7 +30,7 @@ RSpec.describe 'What IF  Order' do
       @local_id_placed = ib.place_order(the_order, the_contract)
     end
 
-    context IB::Connection, focus: true do
+    context IB::Connection do
       subject { IB::Connection.current }
       its(:next_local_id) { is_expected.to eq @initial_order_id + 1 }
       it { expect(subject.received[:OpenOrder]).to have_at_least(1).open_order_message }

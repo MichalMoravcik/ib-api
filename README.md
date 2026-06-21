@@ -91,16 +91,18 @@ Currently implemented plugins
 
 ## Tests
 
-are invoked by 
-
-```
-bundle exec guard
+### Default (unit tests only — no TWS required)
+```bash
+bundle exec rspec
 # or
 bundle exec rake spec
 ```
-Integration tests on order-placements are not included. To run the test suite its thus safe to use a _real Account_.
-You have to edit `spec/spec.yml` and replace the `:account`-Setting with your own `AccountID`, even if you connect to a single account. 
- 
+
+### Integration tests (requires live TWS / IB Gateway)
+Set your account in `spec/spec.yml`, then:
+```bash
+TEST_ENV=real bundle exec rspec --tag integration
+```
 
 ## Contributing
 

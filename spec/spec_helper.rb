@@ -60,6 +60,10 @@ RSpec.configure do |config|
   # focus an example or group by prefixing an f.
   config.filter_run_when_matching focus: true
 
+  config.filter_run_excluding integration: true unless ENV['TEST_ENV'] == 'real'
+  config.filter_run_excluding connected: true unless ENV['TEST_ENV'] == 'real'
+  config.filter_run_excluding slow: true unless ENV['SLOW_TESTS'] == 'true'
+
   config.alias_it_should_behave_like_to :it_has_message, 'has message:'
   config.expose_dsl_globally = true # + monkey-patching in rspec 3
   config.order = 'defined' # "random"

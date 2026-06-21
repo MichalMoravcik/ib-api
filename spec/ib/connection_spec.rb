@@ -16,7 +16,8 @@ describe  IB::Connection do
 end
 
 describe "Connection tests" do
-  it "connect to localhost" do
+  it "connect to localhost", :integration do
+    skip "Set TEST_ENV=real to run integration connection tests" unless ENV['TEST_ENV'] == 'real'
     c = IB::Connection.new host: OPTS[:connection][:host], port: OPTS[:connection][:port]
     expect( c ).to be_a IB::Connection
     c.try_connection!

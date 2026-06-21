@@ -15,7 +15,7 @@ describe 'Order placement' do # :connected => true, :integration => true do
     close_connection
   end
 
-  context 'Placing wrong order', slow: true, focus: true do
+  context 'Placing wrong order', slow: true do
     before(:all) do
       ib = IB::Connection.current
       @initial_local_id = ib.next_local_id
