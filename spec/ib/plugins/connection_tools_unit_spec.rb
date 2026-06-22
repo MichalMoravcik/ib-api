@@ -93,6 +93,32 @@ describe IB::ConnectionTools do
       end
       expect(connection.check_connection).to be true
     end
+
+    it 'retries after IOError' do
+      retry_count = 0
+      allow(connection).to receive(:send_message) do
+        retry_count += 1
+        raise IOError, 'connection lost' if retry_count < 3
+      end
+      allow(connection).to receive(:subscribe).and_wrap_original do |m, *args, &block|
+        id = m.call(*args, &block)
+        Thread.new { sleep 0.01; connection.received[:CurrentTime] << :ok; block.call(double) if block }
+        id
+      end
+      expect(connection.check_connection).to be true
+    end
+
+    it 'raises Workflow::NoTransitionAllowed after disconnect' do
+      allow(connection).to receive(:send_message) { raise IB::Error, 'not connected' }
+      allow(connection).to receive(:reconnect) { raise Workflow::NoTransitionAllowed, 'stuck' }
+      expect { connection.check_connection }.to raise_error(Workflow::NoTransitionAllowed)
+    end
+
+    it 'exhausts retries and returns nil when no response' do
+      allow(connection).to receive(:send_message)
+      allow(connection).to receive(:subscribe).and_return(1)
+      expect(connection.check_connection).to be_falsey
+    end
   end
 
   describe '#try_connection error branches' do
@@ -115,6 +141,15 @@ describe IB::ConnectionTools do
       allow(connection).to receive(:_try_connection).and_raise(IB::Error, 'boom')
       result = mod_method.bind(connection).call(2)
       expect(result).to eq(connection)
+    end
+
+    it 'retries with retry message on ECONNREFUSED after first attempt' do
+      mod_method = IB::ConnectionTools.instance_method(:try_connection)
+      allow(connection).to receive(:sleep)
+      allow(connection).to receive(:_try_connection).and_raise(Errno::ECONNREFUSED)
+      expect(connection).to receive(:logger).at_least(:once).and_call_original
+      result = mod_method.bind(connection).call(2)
+      expect(result).to be false
     end
   end
 end

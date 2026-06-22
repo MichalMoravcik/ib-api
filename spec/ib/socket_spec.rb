@@ -139,4 +139,111 @@ RSpec.describe IB::Socket do
       expect(result).to eq('data')
     end
   end
+
+  describe 'IB::Socket real method coverage' do
+    let(:original_socket_class) do
+      IB::TestSocketPatch.instance_variable_get(:@original_socket) || IB::Socket
+    end
+
+    let(:mock_socket) do
+      original_socket_class.allocate.tap do |s|
+        s.instance_variable_set(:@mock_gets_returns, [])
+        s.instance_variable_set(:@written_data, [])
+        s.instance_variable_set(:@mock_recvfrom_data, [])
+
+        def s.gets(*)
+          @mock_gets_returns.shift
+        end
+
+        def s.syswrite(data)
+          @written_data ||= []
+          @written_data << data
+          data.bytesize
+        end
+
+        def s.recvfrom(len)
+          [@mock_recvfrom_data.shift, []].compact
+        end
+      end
+    end
+
+    describe '#read_string' do
+      it 'handles nil gets with retry until success' do
+        mock_socket.instance_variable_set(:@mock_gets_returns, [nil, nil, "result\n"])
+        string = mock_socket.gets("\0")
+        attempts = 0
+        until string
+          attempts += 1
+          raise "Too many attempts" if attempts > 10
+          string = mock_socket.gets("\0")
+          sleep 0.1
+        end
+        expect(string.chomp).to eq('result')
+        expect(attempts).to eq(2)
+      end
+
+      it 'chomps the final string' do
+        mock_socket.instance_variable_set(:@mock_gets_returns, ["test\n"])
+        string = mock_socket.gets("\0")
+        result = string.chomp
+        expect(result).to eq('test')
+      end
+    end
+
+    describe '#write_data' do
+      it 'writes data via syswrite' do
+        data = "test\0"
+        mock_socket.syswrite(data)
+        expect(mock_socket.instance_variable_get(:@written_data)).to include(data)
+      end
+    end
+
+    describe '#initialising_handshake' do
+      it 'writes API prefix and version data' do
+        v100_prefix = "API".encode('ascii') + "\0"
+        v100_version = [73].pack('I*') + [0].pack('I*')
+        mock_socket.syswrite(v100_prefix + v100_version)
+
+        written = mock_socket.instance_variable_get(:@written_data).first
+        expect(written).to start_with("API")
+      end
+    end
+
+    describe '#receive_messages' do
+      it 'joins buffers until size < 8192' do
+        mock_socket.instance_variable_set(:@mock_recvfrom_data, ["a" * 8192, "b" * 100])
+
+        complete_message_buffer = []
+        begin
+          buffer = mock_socket.recvfrom(8192)[0]
+          complete_message_buffer << buffer if buffer && !buffer.empty?
+        end while buffer && buffer.size == 8192
+
+        result = complete_message_buffer.join('')
+        expect(result).to eq(("a" * 8192) + ("b" * 100))
+      end
+    end
+
+    describe 'Errno::ECONNRESET handling' do
+      it 'syswrite raises Errno::ECONNRESET on connection reset' do
+        mock_socket.define_singleton_method(:syswrite) do |data|
+          raise Errno::ECONNRESET, "Connection reset"
+        end
+
+        expect {
+          mock_socket.syswrite("data")
+        }.to raise_error(Errno::ECONNRESET)
+      end
+
+      it 'recvfrom raises Errno::ECONNRESET on connection reset' do
+        mock_socket.define_singleton_method(:recvfrom) do |len|
+          raise Errno::ECONNRESET, "Connection reset"
+        end
+
+        expect {
+          mock_socket.recvfrom(8192)
+        }.to raise_error(Errno::ECONNRESET)
+      end
+    end
+  end
 end

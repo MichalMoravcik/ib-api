@@ -5,9 +5,11 @@ require 'simplecov'
 SimpleCov.at_exit do
   SimpleCov.result.format!
   percent = SimpleCov.result.covered_percent.round(2)
+  branch_stat = SimpleCov.result.coverage_statistics[:branch]
+  branch_percent = branch_stat ? branch_stat.percent.round(2) : 0
   File.write(
     File.join(SimpleCov.coverage_path, '.last_run.json'),
-    JSON.pretty_generate(result: { line: percent })
+    JSON.pretty_generate(result: { line: percent, branch: branch_percent })
   )
 end
 SimpleCov.start

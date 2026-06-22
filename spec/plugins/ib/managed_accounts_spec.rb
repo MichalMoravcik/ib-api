@@ -314,4 +314,161 @@ describe 'ManagedAccounts plugin' do
       expect(connection.method(:activate_managed_accounts)).to eq connection.method(:subscribe_account_updates)
     end
   end
+
+  describe 'error branches' do
+    describe '#clients' do
+      it 'returns empty array when no accounts exist' do
+        connection.instance_variable_set(:@accounts, [])
+        expect(connection.clients).to eq([])
+      end
+    end
+
+    describe '#advisor' do
+      it 'returns nil when no accounts exist' do
+        connection.instance_variable_set(:@accounts, [])
+        expect(connection.advisor).to be_nil
+      end
+    end
+
+    describe '#account_data' do
+      it 'returns nil when account not found by id' do
+        connection.instance_variable_set(:@accounts, [user_account])
+        yielded = nil
+        result = connection.send(:account_data, 'NONEXISTENT') { |a| yielded = a }
+        expect(yielded).to be_nil
+      end
+    end
+
+    describe '#get_account_data' do
+      before do
+        connection.instance_variable_set(:@accounts, [user_account])
+        allow(connection).to receive(:send_message)
+        allow(connection).to receive(:subscribe).and_return(1)
+        allow(connection).to receive(:unsubscribe)
+      end
+
+      it 'raises error when account identifier is not found' do
+        expect { connection.get_account_data('MISSING') }.to raise_error(IB::Error, /No Account detected/)
+      end
+    end
+
+    describe '#subscribe_account_updates' do
+      before { connection.instance_variable_set(:@accounts, [user_account]) }
+
+      context 'add_or_update lambda' do
+        let(:contract1) { factory.create_stock(symbol: 'AAPL', con_id: 100) }
+        let(:contract2) { factory.create_stock(symbol: 'MSFT', con_id: 200) }
+
+        it 'appends new portfolio value when contract not present' do
+          subscriber = connection.send(:subscribe_account_updates)
+          handler = subscribers[IB::Messages::Incoming::PortfolioValue].values.first
+
+          msg1 = IB::Messages::Incoming::PortfolioValue.new(
+            contract: contract1.attributes.merge(sec_type: 'STK'),
+            portfolio_value: { position: 10, market_price: 150.0, market_value: 1500.0, average_cost: 145.0, unrealized_pnl: 50.0, realized_pnl: 0.0 },
+            account: 'DU167348'
+          )
+          handler.call(msg1)
+          expect(user_account.portfolio_values.size).to eq(1)
+        end
+
+        it 'updates existing portfolio value when same contract arrives' do
+          subscriber = connection.send(:subscribe_account_updates)
+          handler = subscribers[IB::Messages::Incoming::PortfolioValue].values.first
+
+          msg1 = IB::Messages::Incoming::PortfolioValue.new(
+            contract: contract1.attributes.merge(sec_type: 'STK'),
+            portfolio_value: { position: 10, market_price: 150.0, market_value: 1500.0, average_cost: 145.0, unrealized_pnl: 50.0, realized_pnl: 0.0 },
+            account: 'DU167348'
+          )
+          msg2 = IB::Messages::Incoming::PortfolioValue.new(
+            contract: contract1.attributes.merge(sec_type: 'STK'),
+            portfolio_value: { position: 20, market_price: 155.0, market_value: 3100.0, average_cost: 147.0, unrealized_pnl: 100.0, realized_pnl: 5.0 },
+            account: 'DU167348'
+          )
+
+          handler.call(msg1)
+          handler.call(msg2)
+
+          expect(user_account.portfolio_values.size).to eq(1)
+          expect(user_account.portfolio_values.first.position).to eq(20)
+          expect(user_account.portfolio_values.first.market_value.to_f).to eq(3100.0)
+        end
+
+        it 'does not duplicate contracts in account.contracts' do
+          subscriber = connection.send(:subscribe_account_updates)
+          handler = subscribers[IB::Messages::Incoming::PortfolioValue].values.first
+
+          msg1 = IB::Messages::Incoming::PortfolioValue.new(
+            contract: contract1.attributes.merge(sec_type: 'STK'),
+            portfolio_value: { position: 10, market_price: 150.0, market_value: 1500.0, average_cost: 145.0, unrealized_pnl: 50.0, realized_pnl: 0.0 },
+            account: 'DU167348'
+          )
+          msg2 = IB::Messages::Incoming::PortfolioValue.new(
+            contract: contract1.attributes.merge(sec_type: 'STK'),
+            portfolio_value: { position: 20, market_price: 155.0, market_value: 3100.0, average_cost: 147.0, unrealized_pnl: 100.0, realized_pnl: 5.0 },
+            account: 'DU167348'
+          )
+
+          handler.call(msg1)
+          handler.call(msg2)
+
+          expect(user_account.contracts.size).to eq(1)
+        end
+      end
+
+      context 'AccountDownloadEnd with boundary conditions' do
+        let(:subscriber) do
+          connection.send(:subscribe_account_updates)
+          subscribers[IB::Messages::Incoming::AccountDownloadEnd].values.first
+        end
+
+        it 'raises error when exactly 10 account values present (threshold is > 10)' do
+          10.times do |i|
+            user_account.account_values << IB::AccountValue.new(key: "key#{i}", value: i.to_s, currency: 'USD')
+          end
+          msg = IB::Messages::Incoming::AccountDownloadEnd.new(account_name: 'DU167348')
+          expect { subscriber.call(msg) }.to raise_error(IB::TransmissionError)
+        end
+
+        it 'succeeds when 11 account values present (threshold is > 10)' do
+          11.times do |i|
+            user_account.account_values << IB::AccountValue.new(key: "key#{i}", value: i.to_s, currency: 'USD')
+          end
+          msg = IB::Messages::Incoming::AccountDownloadEnd.new(account_name: 'DU167348')
+          expect { subscriber.call(msg) }.not_to raise_error
+          expect(user_account.connected).to be true
+        end
+      end
+    end
+
+    describe '#initialize_managed_accounts' do
+      let(:alert_queue) do
+        q = Queue.new
+        allow(q).to receive(:pop).and_return(false) # Alert code 321 triggers
+        allow(q).to receive(:close)
+        q
+      end
+
+      before do
+        allow(connection).to receive(:connected?).and_return(false)
+        allow(connection).to receive(:try_connection!)
+        allow(connection).to receive(:disconnect!)
+        allow(connection).to receive(:send_message)
+        allow(connection).to receive(:unsubscribe)
+        allow(Queue).to receive(:new).and_return(alert_queue)
+        connection.instance_variable_set(:@accounts, [])
+      end
+
+      it 'handles single account alert (code 321)' do
+        expect(connection).to receive(:subscribe).with(:Alert).and_wrap_original do |m, *args, &block|
+          block.call(double('alert', code: 321))
+          4
+        end
+        expect(connection).to receive(:subscribe).with(:ManagedAccounts).and_return(3)
+        allow(connection).to receive(:subscribe).with(:ReceiveFA).and_return(2)
+        connection.send(:initialize_managed_accounts)
+      end
+    end
+  end
 end
