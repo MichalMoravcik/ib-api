@@ -48,7 +48,55 @@ module IB
           action: action,
           total_quantity: quantity,
           order_type: 'TRAIL',
-          trailing_amount: trail_amount
+          aux_price: trail_amount
+        }.merge(attrs)
+        IB::Order.new(attributes)
+      end
+
+      def create_trailing_stop_limit_order(action: 'BUY', quantity: 100, price: 150.0, trail_amount: 1.0, **attrs)
+        attributes = {
+          action: action,
+          total_quantity: quantity,
+          order_type: 'TRAIL LIMIT',
+          limit_price: price,
+          aux_price: trail_amount
+        }.merge(attrs)
+        IB::Order.new(attributes)
+      end
+
+      def create_pegged_to_stock_order(action: 'BUY', quantity: 100, **attrs)
+        attributes = {
+          action: action,
+          total_quantity: quantity,
+          order_type: 'PEG STK'
+        }.merge(attrs)
+        IB::Order.new(attributes)
+      end
+
+      def create_pegged_to_primary_order(action: 'BUY', quantity: 100, **attrs)
+        attributes = {
+          action: action,
+          total_quantity: quantity,
+          order_type: 'REL'
+        }.merge(attrs)
+        IB::Order.new(attributes)
+      end
+
+      def create_relative_order(action: 'BUY', quantity: 100, **attrs)
+        attributes = {
+          action: action,
+          total_quantity: quantity,
+          order_type: 'REL'
+        }.merge(attrs)
+        IB::Order.new(attributes)
+      end
+
+      def create_volatility_order(action: 'BUY', quantity: 100, volatility: 0.25, **attrs)
+        attributes = {
+          action: action,
+          total_quantity: quantity,
+          order_type: 'VOL',
+          volatility: volatility
         }.merge(attrs)
         IB::Order.new(attributes)
       end

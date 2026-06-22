@@ -61,6 +61,29 @@ module IB
         attributes = { sec_type: 'BAG', exchange: 'SMART', currency: 'USD' }.merge(attrs)
         IB::Bag.new(attributes)
       end
+
+      def create_future_option(symbol: 'ES', strike: 150.0, expiry: '20251220', right: :call, **attrs)
+        attributes = {
+          symbol: symbol,
+          sec_type: 'FOP',
+          exchange: 'GLOBEX',
+          currency: 'USD',
+          strike: strike,
+          expiry: expiry,
+          right: right
+        }.merge(attrs)
+        IB::FutureOption.new(attributes)
+      end
+
+      def create_spread(symbol: 'AAPL', **attrs)
+        attributes = { symbol: symbol, sec_type: 'BAG', exchange: 'SMART', currency: 'USD' }.merge(attrs)
+        IB::Spread.new(attributes)
+      end
+
+      def create_stock_spread(symbol: 'AAPL', **attrs)
+        attributes = { symbol: symbol, sec_type: 'BAG', exchange: 'SMART', currency: 'USD' }.merge(attrs)
+        IB::Spread.new(attributes)
+      end
     end
   end
 end

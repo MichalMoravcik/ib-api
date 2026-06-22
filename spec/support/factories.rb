@@ -42,6 +42,22 @@ module IB
           create_stop_order(**attributes)
         when :stop_limit_order
           create_stop_limit_order(**attributes)
+        when :trailing_stop_limit_order
+          create_trailing_stop_limit_order(**attributes)
+        when :pegged_to_stock_order
+          create_pegged_to_stock_order(**attributes)
+        when :pegged_to_primary_order
+          create_pegged_to_primary_order(**attributes)
+        when :relative_order
+          create_relative_order(**attributes)
+        when :volatility_order
+          create_volatility_order(**attributes)
+        when :future_option
+          create_future_option(**attributes)
+        when :spread
+          create_spread(**attributes)
+        when :stock_spread
+          create_stock_spread(**attributes)
         else
           raise ArgumentError, "Unknown factory type: #{type}"
         end
@@ -63,6 +79,27 @@ module IB
           attributes = apply_trait(trait, attributes)
         end
         create(type, **attributes)
+      end
+
+      # Convenience methods for common stocks
+      def aapl_stock
+        create_stock(symbol: 'AAPL')
+      end
+
+      def msft_stock
+        create_stock(symbol: 'MSFT')
+      end
+
+      def goog_stock
+        create_stock(symbol: 'GOOGL')
+      end
+
+      def popular_stocks
+        [aapl_stock, msft_stock, goog_stock]
+      end
+
+      def common_options
+        [create_option(symbol: 'AAPL'), create_option(symbol: 'MSFT', right: 'P')]
       end
 
       private
