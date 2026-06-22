@@ -56,6 +56,25 @@ RSpec.describe 'Order Prototypes (unit)' do
       expect(order.trail_stop_price).to eq(150)
       expect(order.aux_price).to eq(5)
     end
+
+    it 'builds a trailing stop order with trailing_percent' do
+      order = IB::TrailingStop.order action: :buy, size: 100, price: 150, trailing_percent: 5
+      expect(order.order_type).to eq(:trailing_stop)
+      expect(order.trail_stop_price).to eq(150)
+      expect(order.trailing_percent).to eq(5)
+    end
+
+    it 'raises when neither trailing_amount nor trailing_percent is provided' do
+      expect { IB::TrailingStop.order action: :buy, size: 100, price: 150 }
+        .to raise_error(IB::ArgumentError, /One of the alternative fields needs to be specified/)
+    end
+
+    it 'raises when both trailing_amount and trailing_percent are provided' do
+      expect {
+        IB::TrailingStop.order action: :buy, size: 100, price: 150,
+                               trailing_amount: 5, trailing_percent: 5
+      }.to raise_error(IB::ArgumentError, /One of the alternative fields needs to be specified/)
+    end
   end
 
   describe IB::Market do
@@ -95,6 +114,34 @@ RSpec.describe 'Order Prototypes (unit)' do
       expect(order.reference_change_amount).to eq(1.0)
       expect(order.reference_contract_id).to eq(123)
     end
+
+    it 'accepts optional parameters' do
+      order = IB::Pegged2Benchmark.order action: :buy, size: 100,
+                                         starting_price: 150,
+                                         change_by: 0.5,
+                                         reference_change_by: 1.0,
+                                         reference: 123,
+                                         stock_ref_price: 145,
+                                         stock_range_lower: 140,
+                                         stock_range_upper: 160,
+                                         decrease: true,
+                                         reference_exchange_id: 'NASDAQ'
+      expect(order.stock_ref_price).to eq(145)
+      expect(order.stock_range_lower).to eq(140)
+      expect(order.stock_range_upper).to eq(160)
+      expect(order.is_pegged_change_amount_decrease).to be true
+      expect(order.reference_exchange_id).to eq('NASDAQ')
+    end
+
+    it 'aliases decrease to is_pegged_change_amount_decrease' do
+      order = IB::Pegged2Benchmark.order action: :buy, size: 100,
+                                         starting_price: 150,
+                                         change_by: 0.5,
+                                         reference_change_by: 1.0,
+                                         reference: 123,
+                                         decrease: true
+      expect(order.is_pegged_change_amount_decrease).to be true
+    end
   end
 
   describe IB::Discretionary do
@@ -102,6 +149,15 @@ RSpec.describe 'Order Prototypes (unit)' do
       order = IB::Discretionary.order action: :buy, size: 100, price: 150, dc: 0.5
       expect(order.order_type).to eq(:limit)
       expect(order.discretionary_amount).to eq(0.5)
+    end
+
+    it 'accepts optional discretionary_amount' do
+      order = IB::Discretionary.order action: :buy, size: 100, price: 150, discretionary_amount: 0.75
+      expect(order.discretionary_amount).to eq(0.75)
+    end
+
+    it 'returns an example' do
+      expect(IB::Discretionary.example).to be_a(String)
     end
   end
 
@@ -212,6 +268,23 @@ RSpec.describe 'Order Prototypes (unit)' do
       expect(order.limit_price_offset).to eq(145)
       expect(order.trailing_percent).to eq(5)
     end
+
+    it 'builds with aux_price (absolute trailing amount)' do
+      order = IB::TrailingStopLimit.order action: :buy, size: 100,
+                                          trail_stop_price: 150,
+                                          limit_price_offset: 145,
+                                          aux_price: 5
+      expect(order.order_type).to eq(:trailing_limit)
+      expect(order.aux_price).to eq(5)
+    end
+
+    it 'raises when neither trailing_amount nor trailing_percent is provided' do
+      expect {
+        IB::TrailingStopLimit.order action: :buy, size: 100,
+                                    trail_stop_price: 150,
+                                    limit_price_offset: 145
+      }.to raise_error(IB::ArgumentError, /One of the alternative fields needs to be specified/)
+    end
   end
 
   describe IB::Pegged2Market do
@@ -231,6 +304,24 @@ RSpec.describe 'Order Prototypes (unit)' do
       expect(order.order_type).to eq(:pegged_to_market)
       expect(order.starting_price).to eq(150)
       expect(order.delta).to eq(0.5)
+    end
+
+    it 'accepts optional stock_ref_price' do
+      order = IB::Pegged2Stock.order action: :buy, size: 100,
+                                     starting_price: 150,
+                                     delta: 0.5,
+                                     stock_ref_price: 145
+      expect(order.stock_ref_price).to eq(145)
+    end
+
+    it 'accepts optional stock_range_lower and stock_range_upper' do
+      order = IB::Pegged2Stock.order action: :buy, size: 100,
+                                     starting_price: 150,
+                                     delta: 0.5,
+                                     stock_range_lower: 140,
+                                     stock_range_upper: 160
+      expect(order.stock_range_lower).to eq(140)
+      expect(order.stock_range_upper).to eq(160)
     end
   end
 
@@ -257,6 +348,10 @@ RSpec.describe 'Order Prototypes (unit)' do
       expect(order.order_type).to eq(:limit)
       expect(order.cash_qty).to be true
     end
+
+    it 'has cash_qty in requirements' do
+      expect(IB::ForexLimit.requirements).to include(:cash_qty)
+    end
   end
 
   describe IB::AtAuction do
@@ -274,13 +369,13 @@ RSpec.describe 'Order Prototypes (unit)' do
       expect(order.volatility).to eq(25)
       expect(order.volatility_type).to eq(:annual)
     end
-  end
 
-  describe IB::Discretionary do
-    it 'returns an example' do
-      expect(IB::Discretionary.example).to be_a(String)
+    it 'aliases volatility_percent to volatility' do
+      order = IB::Volatility.order action: :buy, size: 100, volatility: 30
+      expect(order.volatility).to eq(30)
     end
   end
+
 
   describe 'metadata methods' do
     [
