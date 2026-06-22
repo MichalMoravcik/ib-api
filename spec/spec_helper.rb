@@ -2,6 +2,14 @@
 
 require 'bundler/setup'
 require 'simplecov'
+SimpleCov.at_exit do
+  SimpleCov.result.format!
+  percent = SimpleCov.result.covered_percent.round(2)
+  File.write(
+    File.join(SimpleCov.coverage_path, '.last_run.json'),
+    JSON.pretty_generate(result: { line: percent })
+  )
+end
 SimpleCov.start
 require 'rspec'
 require 'rspec/its'

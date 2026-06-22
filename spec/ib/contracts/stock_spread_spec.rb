@@ -3,7 +3,7 @@ RSpec.shared_examples 'spread_params' do
   
 end
 
-RSpec.describe "IB::StockSpread" do
+RSpec.describe "IB::StockSpread", :connected do
   before(:all) do
     establish_connection :gateway
     IB::Connection.current.activate_plugin 'spread-prototypes'
