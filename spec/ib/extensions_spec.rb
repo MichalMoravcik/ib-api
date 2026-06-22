@@ -5,7 +5,39 @@ require "spec_helper"
 RSpec.describe ClassExtensions do
 
   context "Array-Extensions" do
+    it "counts duplicates" do
+      arr = [1, 2, 2, 3, 3, 3]
+      expect(arr.count_duplicates).to eq({ 3 => 3, 2 => 2, 1 => 1 })
+    end
 
+    it "presents as table when elements respond to table_header and table_row" do
+      contract = IB::Stock.new(symbol: 'AAPL', con_id: 1, exchange: 'SMART', currency: 'USD')
+      table = [contract].as_table
+      expect(table).to be_a(Terminal::Table)
+      expect(table.render).to include('AAPL')
+    end
+
+    it "renders multiple rows in table" do
+      contracts = [
+        IB::Stock.new(symbol: 'AAPL', con_id: 1, exchange: 'SMART', currency: 'USD'),
+        IB::Stock.new(symbol: 'MSFT', con_id: 2, exchange: 'SMART', currency: 'USD')
+      ]
+      table = contracts.as_table
+      expect(table.render).to include('AAPL')
+      expect(table.render).to include('MSFT')
+    end
+  end
+
+  context "Date-Extensions" do
+    it "renders date in IB format" do
+      date = Date.new(2024, 12, 20)
+      expect(date.to_ib).to start_with('20241220')
+    end
+
+    it "renders with timezone" do
+      date = Date.new(2024, 12, 20)
+      expect(date.to_ib('MET')).to include('MET')
+    end
   end
   context "Time-Extensions" do
     Given( :the_time ){ Time.now }

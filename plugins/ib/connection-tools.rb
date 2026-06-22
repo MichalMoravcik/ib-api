@@ -101,7 +101,7 @@ Provides
     end # def
 
     def submit_to_alert_1102
-      current.subscribe( :Alert ) do
+      current.subscribe( :Alert ) do |msg|
         if [2102, 1101].include? msg.id.to_i # Connectivity between IB and Trader Workstation
                                  #has been restored - data maintained.
           current.disconnect!

@@ -609,25 +609,25 @@ Format of serialisation
            a
    end
 
-   def serialize_peg_best_and_mid
-     return [] unless server_version >= KNOWN_SERVERS[:min_server_ver_pegbest_pegmid_offsets]
-     a =  []
-     send_mid_offsets = false
-     a << min_trade_qty  if contract.exchange == 'IBKRATS'
-     if order.type == :pegged_to_best
-       a << min_compete_size
-       a << compete_against_best_offset
-       send_mid_offsets = true if compete_against_best_offset.nil? # TODO: float max?
-     end
-     if order.type == :pegged_to_midpoint
-       send_mid_offsets = true
-     end
-     if send_mid_offsets
-       a << mid_offset_at_whole
-       a << mid_offset_at_half
-     end
-     a
-   end
+    def serialize_peg_best_and_mid
+      return [] unless server_version >= KNOWN_SERVERS[:min_server_ver_pegbest_pegmid_offsets]
+      a =  []
+      send_mid_offsets = false
+      a << min_trade_qty  if contract&.exchange == 'IBKRATS'
+      if order_type == :pegged_to_best
+        a << min_compete_size
+        a << compete_against_best_offset
+        send_mid_offsets = true if compete_against_best_offset.nil? # TODO: float max?
+      end
+      if order_type == :pegged_to_midpoint
+        send_mid_offsets = true
+      end
+      if send_mid_offsets
+        a << mid_offset_at_whole
+        a << mid_offset_at_half
+      end
+      a
+    end
 
     def serialize_misc_options
       ""      # Vers. 70

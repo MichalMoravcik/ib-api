@@ -93,17 +93,85 @@ describe IB::Option do
     end
   end
 
+  describe '#osi=' do
+    it 'normalizes to 21 characters' do
+      option = IB::Option.new(symbol: 'AAPL')
+      option.osi = 'AAPL 241220C00150000'
+      expect(option.local_symbol).to eq('AAPL  241220C00150000')
+    end
+  end
+
+  describe '#next_expiry' do
+    before do
+      allow(IB::Connection).to receive(:current).and_return(double('connection', plugins: []))
+    end
+
+    it 'returns merged option without verify plugin' do
+      option = IB::Option.new(symbol: 'AAPL', strike: 150, right: :call)
+      result = option.next_expiry('20241201')
+      expect(result).to be_a(IB::Option)
+      expect(result.expiry).to eq('20241220')
+    end
+
+    it 'uses verify plugin when available' do
+      allow(IB::Connection).to receive(:current).and_return(double('connection', plugins: ['verify']))
+      verified = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150)
+      option = IB::Option.new(symbol: 'AAPL', right: :call, strike: 150)
+      allow(option).to receive(:merge).and_return(verified)
+      allow(verified).to receive(:verify).and_return([verified])
+
+      result = option.next_expiry('20241201')
+      expect(result).to eq(verified)
+    end
+
+    it 'raises when no expiry can be found' do
+      allow(IB::Connection).to receive(:current).and_return(double('connection', plugins: ['verify']))
+      option = IB::Option.new(symbol: 'AAPL', right: :call, strike: 150)
+      verified = IB::Option.new(symbol: 'AAPL', expiry: '20240101', right: :call, strike: 150)
+      allow(option).to receive(:merge).and_return(verified)
+      allow(verified).to receive(:verify).and_return([])
+
+      expect { option.next_expiry('20240101') }.to raise_error(IB::LoadError)
+    end
+  end
+
+  describe 'FutureOption' do
+    it 'defaults sec_type to futures_option' do
+      fo = IB::FutureOption.new(symbol: 'ES')
+      expect(fo.sec_type).to eq(:futures_option)
+    end
+  end
+
   describe '#to_human' do
-    it 'returns formatted option description' do
-      option = IB::Option.new(
-        symbol: 'AAPL',
-        expiry: '20241220',
-        right: :call,
-        strike: 150.0
-      )
-      result = option.to_human
-      expect(result).to be_a(String)
-      expect(result).to include('AAPL')
+    it 'includes option attributes' do
+      option = IB::Option.new(symbol: 'AAPL', expiry: '20241220', right: :call, strike: 150.0)
+      expect(option.to_human).to include('AAPL')
+      expect(option.to_human).to include('150.0')
+      expect(option.to_human).to include('call')
+    end
+  end
+
+  describe 'validations' do
+    it 'rejects non-positive strike' do
+      option = IB::Option.new(symbol: 'AAPL', right: :call, strike: 0)
+      expect(option).not_to be_valid
+    end
+
+    it 'rejects invalid right' do
+      option = IB::Option.new(symbol: 'AAPL', right: :none)
+      expect(option).not_to be_valid
+    end
+  end
+
+  describe '.next_expiry edge cases' do
+    it 'handles integer day input' do
+      result = IB::Option.next_expiry(15)
+      expect(result).to match(/\d{8}/)
+    end
+
+    it 'handles string month input' do
+      result = IB::Option.next_expiry('202412')
+      expect(result).to eq('20241220')
     end
   end
 end

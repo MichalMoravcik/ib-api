@@ -12,7 +12,7 @@ module IB
     def self.make  buffer
       m = self.new  conjunction_connection:  buffer.read_string,
                     operator: buffer.read_int,
-                    volumne: buffer.read_int
+                    volume: buffer.read_int
 
       the_contract = IB::Contract.new con_id: buffer.read_int, exchange: buffer.read_string
       m.contract = the_contract

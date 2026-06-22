@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'spec_helper'
+
 RSpec.describe IB::Socket do
   let(:socket) { IB::SocketStub.new }
 
@@ -96,6 +98,45 @@ RSpec.describe IB::Socket do
   describe "#close" do
     it "returns true" do
       expect(socket.close).to be true
+    end
+  end
+
+  describe 'real socket methods with mocked TCPSocket' do
+    let(:original_socket_class) do
+      IB::TestSocketPatch.instance_variable_get(:@original_socket) || IB::Socket
+    end
+
+    let(:real_socket) do
+      original_socket_class.allocate.tap do |s|
+        def s.gets(*); "response\n"; end
+        def s.syswrite(data); (@written ||= []) << data; data.bytesize; end
+        def s.recvfrom(n); ["data", []]; end
+        def s.written; @written ||= []; end
+      end
+    end
+
+    it 'performs the initialising handshake' do
+      real_socket.initialising_handshake
+      expect(real_socket.written).not_to be_empty
+    end
+
+    it 'reads a string' do
+      expect(real_socket.read_string).to eq('response')
+    end
+
+    it 'writes data' do
+      real_socket.write_data("test\0")
+      expect(real_socket.written).to include("test\0")
+    end
+
+    it 'sends prepared messages' do
+      real_socket.send_messages('a', 'b')
+      expect(real_socket.written).not_to be_empty
+    end
+
+    it 'receives messages' do
+      result = real_socket.receive_messages
+      expect(result).to eq('data')
     end
   end
 end

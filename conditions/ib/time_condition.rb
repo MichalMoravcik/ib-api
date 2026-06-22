@@ -19,7 +19,7 @@ module IB
     def serialize
       t =  self[:time]
       if t.is_a?(String) && t =~ /^\d{8}\z/  # expiry-format yyymmmdd
-        self.time = DateTime.new t[0..3],t[4..5],t[-2..-1]
+        self.time = DateTime.new t[0..3].to_i, t[4..5].to_i, t[-2..-1].to_i
       end
       serialized_time = case self[:time]   # explicity formatting of time-object
                         when String

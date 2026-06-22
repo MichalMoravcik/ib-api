@@ -163,6 +163,138 @@ RSpec.describe IB::Support do
         expect(result).to be_a(Hash)
         expect(result[:key1]).to eq("value1")
       end
+
+      it "handles odd number of tags" do
+        arr = [3, "key1", "value1", "key2"]
+        result = arr.read_hash
+        expect(result[:key1]).to eq("value1")
+        expect(result).to have_key(:key2)
+      end
+
+      it "skips nil keys" do
+        arr = [2, nil, "value"]
+        expect(arr.read_hash).to eq({})
+      end
+    end
+
+    describe "#read_string_not_null" do
+      it "returns nil for TWS_MAX sentinel" do
+        arr = [IB::TWS_MAX.to_s]
+        expect(arr.read_string_not_null).to be_nil
+      end
+
+      it "returns the string for regular values" do
+        arr = ["hello"]
+        expect(arr.read_string_not_null).to eq("hello")
+      end
+    end
+
+    describe "#read_datetime" do
+      it "parses datetime string" do
+        arr = ["2024-12-20T12:00:00"]
+        expect(arr.read_datetime).to be_a(DateTime)
+      end
+
+      it "returns nil for blank string" do
+        arr = [""]
+        expect(arr.read_datetime).to be_nil
+      end
+    end
+
+    describe "#read_date" do
+      it "parses date string" do
+        arr = ["2024-12-20"]
+        expect(arr.read_date).to eq(Date.new(2024, 12, 20))
+      end
+
+      it "returns nil for blank string" do
+        arr = [""]
+        expect(arr.read_date).to be_nil
+      end
+    end
+
+    describe "#read_decimal_limit_2" do
+      it "returns nil for -2 and below" do
+        arr = [-2]
+        expect(arr.read_decimal_limit_2).to be_nil
+      end
+
+      it "returns value above -2" do
+        arr = [-1]
+        expect(arr.read_decimal_limit_2).to eq(-1)
+      end
+    end
+
+    describe "#read_xml" do
+      it "parses xml string into hash" do
+        arr = ["<root><key>value</key></root>"]
+        result = arr.read_xml
+        expect(result).to be_a(Hash)
+      end
+    end
+
+    describe "#read_int_date" do
+      it "parses a date string" do
+        arr = ["20241220"]
+        expect(arr.read_int_date).to eq(Date.new(2024, 12, 20))
+      end
+
+      it "returns Time for epoch integer" do
+        arr = [1735689600]
+        result = arr.read_int_date
+        expect(result).to be_a(Time)
+      end
+    end
+
+    describe "#read_bool" do
+      it "aliases read_boolean" do
+        arr = ["1"]
+        expect(arr.read_bool).to be true
+      end
+    end
+
+    describe "#read_decimal_max" do
+      it "aliases read_decimal" do
+        arr = ["3.14"]
+        expect(arr.read_decimal_max.to_f).to eq(3.14)
+      end
+    end
+
+    describe "#read_parse_date" do
+      it "parses a time string" do
+        arr = ["2024-12-20 12:00:00"]
+        expect(arr.read_parse_date).to be_a(Time)
+      end
+    end
+
+    describe "#read_decimal_limit_1" do
+      it "returns nil for -1 and below" do
+        arr = [-1]
+        expect(arr.read_decimal_limit_1).to be_nil
+      end
+
+      it "returns positive decimal" do
+        arr = [1.5]
+        expect(arr.read_decimal_limit_1).to eq(1.5)
+      end
+    end
+
+    describe "#read_contract" do
+      it "reads contract fields" do
+        arr = [1, "AAPL", "STK", "20241220", 150, "C", 100, "SMART", "USD", "AAPL", "AAPL"]
+        result = arr.read_contract
+        expect(result[:symbol]).to eq("AAPL")
+        expect(result[:con_id]).to eq(1)
+      end
+    end
+
+    describe "#read_bar" do
+      it "reads historical bar fields" do
+        arr = ["20241220", 100, 110, 120, 90, 105, 1000, 50]
+        result = arr.read_bar
+        expect(result[:open]).to eq(100)
+        expect(result[:close]).to eq(110)
+      end
     end
 
     describe "#tws" do

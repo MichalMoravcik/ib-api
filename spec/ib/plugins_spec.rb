@@ -187,7 +187,6 @@ describe IB::Plugins do
       end
 
       it 'handles probability-of-expiring plugin' do
-        pending 'probability-of-expiring plugin requires active connection'
         expect { connection.activate_plugin(:probability_of_expiring) }.not_to raise_error
       end
 

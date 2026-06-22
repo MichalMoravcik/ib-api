@@ -36,11 +36,11 @@ module IB
               load_map  [ :mid_point, :decimal ]
                       end
 
-          @out_labels = case @data[ :tick_tpye ]
+          @out_labels = case @data[ :tick_type ]
                       when 1, 2
                         [ "PastLimit", "Unreported" ]
                         when 3
-                        [ "BitPastLow", "BidPastHigh" ]
+                        [ "BidPastLow", "BidPastHigh" ]
                         else
                           []
                         end
@@ -55,7 +55,7 @@ module IB
             "(Midpoint)  #{mid_point } "
           else
             ""
-          end +  @out_labels.zip(resolve_mask).join( "/" )
+          end +  (@out_labels || []).zip(resolve_mask).join( "/" )
         end
 
         [:price, :size, :mask, :exchange, :specialConditions, :bid_price, :ask_price, :bid_size, :ask_size, :mid_point].each do |name|
