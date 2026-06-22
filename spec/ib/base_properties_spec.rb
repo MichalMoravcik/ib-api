@@ -8,7 +8,10 @@ class TestBaseModel < IB::Base
        :side => IB::PROPS[:side],
        :value => :f,
        :flag => :bool,
-       :rating => { validate: { numericality: true } }
+       :rating => { validate: { numericality: true } },
+       :virtual => '',
+       :computed => '',
+       :encoded => { get: :s, set: :i }
 end
 
 describe IB::BaseProperties do
@@ -123,6 +126,37 @@ describe IB::BaseProperties do
       expect(obj).not_to be_valid
       obj.rating = 5
       expect(obj).to be_valid
+    end
+
+    it 'handles empty string property body' do
+      obj = model_class.new(virtual: 'test')
+      expect(obj.virtual).to eq('test')
+      obj.virtual = 'changed'
+      expect(obj.virtual).to eq('changed')
+    end
+
+    it 'handles computed property' do
+      obj = model_class.new(computed: 'value')
+      expect(obj.computed).to eq('value')
+      obj.computed = 'changed'
+      expect(obj.computed).to eq('changed')
+    end
+
+    it 'handles encoded property with get/set procs' do
+      obj = model_class.new
+      obj.encoded = 100
+      expect(obj.encoded).to eq('100')
+      expect(obj.encoded).to be_a(String)
+    end
+
+    it 'handles property with IB::VALUES encoding' do
+      obj = model_class.new(side: :buy)
+      expect(obj.side).to eq(:buy)
+    end
+
+    it 'handles property with CODES encoding' do
+      obj = model_class.new(side: :sell)
+      expect(obj[:side]).to eq('S')
     end
   end
 

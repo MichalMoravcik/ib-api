@@ -50,4 +50,40 @@ describe IB::Messages::Incoming::Alert do
 
     it_behaves_like 'this Alert message'
   end #
+
+  context 'Error message (code < 1000)' do
+    subject do
+      IB::Messages::Incoming::Alert.new(
+        version: 2,
+        error_id: 1,
+        code: 500,
+        message: 'Some error occurred')
+    end
+
+    it 'is an error' do
+      expect(subject.error?).to be true
+      expect(subject.system?).to be false
+      expect(subject.warning?).to be false
+    end
+
+    its(:to_human) { is_expected.to match /TWS Error/ }
+  end
+
+  context 'System message (1000 < code < 2000)' do
+    subject do
+      IB::Messages::Incoming::Alert.new(
+        version: 2,
+        error_id: 1,
+        code: 1100,
+        message: 'System message')
+    end
+
+    it 'is a system message' do
+      expect(subject.error?).to be false
+      expect(subject.system?).to be true
+      expect(subject.warning?).to be false
+    end
+
+    its(:to_human) { is_expected.to match /TWS System/ }
+  end
 end # describe IB::Messages:Incoming

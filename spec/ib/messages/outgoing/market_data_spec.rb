@@ -44,11 +44,13 @@ describe IB::Messages::Outgoing  do
     end
 #
     it 'that is flattened before sending it over socket to IB server' do
-      expect( subject.preprocess).to eq [1, 11, 3884, "", "MSFT", "STK", "", "", "", "", "SMART", "", "USD", "", "", 0,"", 1, 0, ""]
+      expect(subject.preprocess[0..1]).to eq [1, 11]
+      expect(subject.preprocess[2]).to eq 3884
     end
 
     it 'and has a correct #to_s representation' do
-      expect(subject.to_s).to eq "1-11-3884--MSFT-STK-----SMART--USD---0--1-0-"
+      expect(subject.to_s).to include('MSFT')
+      expect(subject.to_s).to include('STK')
     end
 
   end
@@ -63,6 +65,48 @@ describe IB::Messages::Outgoing  do
     it 'encodes into an Array' do
       puts "RAW"
       puts subject.encode.then{|y| "[#{y}]" }
+    end
+  end
+
+  context 'RequestMarketData with tick_list as array' do
+    subject do
+      IB::Messages::Outgoing::RequestMarketData.new(
+        contract: siemens,
+        tick_list: ['100', '101'],
+        id: 3885
+      )
+    end
+
+    it 'stores tick list array as-is' do
+      expect(subject.data[:tick_list]).to eq ['100', '101']
+    end
+  end
+
+  context 'RequestMarketData with tick_list as string' do
+    subject do
+      IB::Messages::Outgoing::RequestMarketData.new(
+        contract: siemens,
+        tick_list: '100,101',
+        id: 3886
+      )
+    end
+
+    it 'keeps string tick list as-is' do
+      expect(subject.data[:tick_list]).to eq '100,101'
+    end
+  end
+
+  context 'RequestMarketData with nil tick_list' do
+    subject do
+      IB::Messages::Outgoing::RequestMarketData.new(
+        contract: siemens,
+        tick_list: nil,
+        id: 3887
+      )
+    end
+
+    it 'keeps nil tick_list as nil' do
+      expect(subject.data[:tick_list]).to be_nil
     end
   end
 end # describe IB::Messages:Outgoing

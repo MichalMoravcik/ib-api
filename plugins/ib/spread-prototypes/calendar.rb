@@ -89,7 +89,7 @@ module IB
           if l_t_d.present?
             begin
               "#{w}:#{Date.parse(l_t_d).strftime('%b %Y')}"
-            rescue ArgumentError
+            rescue ArgumentError, Date::Error
               "#{w}:#{spread.legs.first.expiry}"
             end
           else

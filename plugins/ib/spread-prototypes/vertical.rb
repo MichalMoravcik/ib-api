@@ -77,11 +77,11 @@ module IB
         x = [spread.combo_legs.map(&:weight), spread.legs.map(&:strike)].transpose
         last_trading_day = spread.legs.first.last_trading_day
         date_str = if last_trading_day.present?
-                     begin
-                       Date.parse(last_trading_day).strftime('%b %Y')
-                     rescue ArgumentError
-                       spread.legs.first.expiry
-                     end
+                   begin
+                     Date.parse(last_trading_day).strftime('%b %Y')
+                   rescue ArgumentError, Date::Error
+                     spread.legs.first.expiry
+                   end
                    else
                      spread.legs.first.expiry
                    end

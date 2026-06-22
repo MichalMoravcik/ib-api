@@ -60,12 +60,7 @@ module IB
 
     def enough_data?
       actual_lngth = next_msg_length + HEADER_LNGTH
-      if next_msg_length.nil?
-        Connection.current.logger.warn {"too little data --> #{@data} "}  
-        false
-      else
-        @data.bytesize >= actual_lngth
-      end
+      @data.bytesize >= actual_lngth
     end
 
     def length_data?
@@ -89,11 +84,8 @@ module IB
       raise "Message has an invalid last byte. expecting \0, received: #{last_byte}" if last_byte != "\0"
     end
 
-    def validate_data_header(length)   # disabled
-                                       # todo:: verify length according to the expected dataframe
-                                       # RequestHistoryData returns large datastreams
-      return true# if length <= 5000  
-      raise "Message is longer then max length (#{length}/5000)"
+    def validate_data_header(length)
+      return true
     end
   end
 end

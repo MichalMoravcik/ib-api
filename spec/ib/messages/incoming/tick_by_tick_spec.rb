@@ -124,5 +124,88 @@ describe IB::Messages::Incoming::TickByTick do
         expect(subject.mid_point).to eq(150.25)
       end
     end
+
+    describe 'tick type 0 from buffer' do
+      let(:buffer) { ['1', '0', Time.now.to_i.to_s] }
+      subject { IB::Messages::Incoming::TickByTick.new(buffer) }
+
+      it 'does not load extra fields' do
+        expect(subject.to_human).to eq('< TickByTick:')
+      end
+
+      it 'has empty out_labels' do
+        expect(subject.instance_variable_get(:@out_labels)).to eq([])
+      end
+    end
+
+    describe 'tick type 3 from buffer (Bid/Ask)' do
+      let(:buffer) do
+        ['1', '3', Time.now.to_i.to_s, '150.20', '150.30', '50', '75', '0']
+      end
+      subject { IB::Messages::Incoming::TickByTick.new(buffer) }
+
+      it 'reports bid/ask data' do
+        expect(subject.to_human).to include('Bid/Ask')
+        expect(subject.bid_price).to eq(150.20)
+        expect(subject.ask_price).to eq(150.30)
+        expect(subject.bid_size).to eq(50)
+        expect(subject.ask_size).to eq(75)
+      end
+
+      it 'has BidPastLow/BidPastHigh out_labels' do
+        expect(subject.instance_variable_get(:@out_labels)).to eq(['BidPastLow', 'BidPastHigh'])
+      end
+    end
+
+    describe 'tick type 4 from buffer (Midpoint)' do
+      let(:buffer) do
+        ['1', '4', Time.now.to_i.to_s, '150.25']
+      end
+      subject { IB::Messages::Incoming::TickByTick.new(buffer) }
+
+      it 'reports midpoint data' do
+        expect(subject.to_human).to include('Midpoint')
+        expect(subject.mid_point).to eq(150.25)
+      end
+    end
+
+    describe 'unknown tick type from buffer' do
+      let(:buffer) do
+        ['1', '99', Time.now.to_i.to_s]
+      end
+      subject { IB::Messages::Incoming::TickByTick.new(buffer) }
+
+      it 'has empty to_human body' do
+        expect(subject.to_human).to eq('< TickByTick:')
+      end
+
+      it 'has empty out_labels' do
+        expect(subject.instance_variable_get(:@out_labels)).to eq([])
+      end
+    end
+
+    describe 'resolve_mask with nil mask' do
+      subject { IB::Messages::Incoming::TickByTick.new(base_data.merge(tick_type: 1)) }
+
+      it 'returns empty array when mask is absent' do
+        expect(subject.resolve_mask).to eq([])
+      end
+    end
+
+    describe 'tick type 1 from buffer with mask=1' do
+      let(:buffer) do
+        ['1', '1', Time.now.to_i.to_s, '150.25', '100', '1', 'SMART', '']
+      end
+      subject { IB::Messages::Incoming::TickByTick.new(buffer) }
+
+      it 'includes PastLimit label with resolved mask' do
+        expect(subject.to_human).to include('PastLimit/1')
+        expect(subject.to_human).to include('Unreported/0')
+      end
+
+      it 'resolves mask for single bit' do
+        expect(subject.resolve_mask).to eq([1, 0])
+      end
+    end
   end
 end

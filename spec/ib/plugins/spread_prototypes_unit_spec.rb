@@ -369,6 +369,77 @@ describe 'IB::Spread prototypes (unit)' do
           }.to raise_error(IB::Error, /Argument must be an option/)
         end
       end
+
+      context 'with legs initialization failure' do
+        before do
+          allow(call_option).to receive(:verify).and_return([call_option])
+          allow(call_option).to receive(:essential).and_return(call_option)
+          allow(call_option).to receive(:merge).and_return(call_option)
+          allow(call_option).to receive(:strike).and_return(150.0)
+          allow(call_option).to receive(:right).and_return(:put)
+          allow(call_option).to receive(:sec_type).and_return(:option)
+          allow(call_option).to receive(:local_symbol).and_return('')
+          allow(call_option).to receive(:con_id).and_return(0)
+        end
+
+        it 'raises error when legs count is wrong' do
+          allow_any_instance_of(IB::Spread).to receive(:add_leg)
+          expect {
+            IB::Strangle.fabricate(call_option, 10)
+          }.to raise_error(IB::Error, /Initialisation of Legs failed/)
+        end
+      end
+    end
+
+    describe 'the_description' do
+      context 'with valid last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: '2024-12-20', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: '2024-12-20', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'formats date correctly' do
+          desc = IB::Strangle.the_description(@spread)
+          expect(desc).to include('Strangle')
+          expect(desc).to include('Dec 2024')
+        end
+      end
+
+      context 'with missing last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: nil, expiry: '20241220', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: nil, expiry: '20241220', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'uses expiry string' do
+          desc = IB::Strangle.the_description(@spread)
+          expect(desc).to include('20241220')
+        end
+      end
+
+      context 'with invalid last_trading_day format' do
+        before do
+          merged_put = put_option.merge(last_trading_day: '', expiry: '20241220', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: '', expiry: '20241220', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'uses expiry when last_trading_day is blank' do
+          desc = IB::Strangle.the_description(@spread)
+          expect(desc).to include('20241220')
+        end
+      end
     end
   end
 
@@ -413,6 +484,193 @@ describe 'IB::Spread prototypes (unit)' do
         it 'accepts futures_option as master' do
           spread = IB::Straddle.fabricate(future_option)
           expect(spread).to be_an(IB::Spread)
+        end
+      end
+    end
+  end
+
+  describe IB::SpreadPrototype do
+    describe '#requirements' do
+      it 'returns empty hash by default' do
+        expect(IB::Vertical.requirements).to eq({})
+      end
+    end
+
+    describe '#optional' do
+      it 'returns empty hash by default' do
+        expect(IB::Vertical.optional).to eq({})
+      end
+    end
+
+    describe '#parameters' do
+      it 'formats parameters output' do
+        output = IB::Vertical.parameters
+        expect(output).to include('Required')
+        expect(output).to include('Optional')
+        expect(output).to include('none')
+      end
+    end
+  end
+
+  describe IB::Vertical do
+    describe '.the_description' do
+      context 'with valid last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: '2024-12-20', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: '2024-12-20', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'formats date correctly' do
+          desc = IB::Vertical.the_description(@spread)
+          expect(desc).to include('Vertical')
+          expect(desc).to include('Dec 2024')
+        end
+      end
+
+      context 'with invalid last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: 'invalid-date', expiry: '20241220', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: 'invalid-date', expiry: '20241220', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'uses expiry when last_trading_day parsing fails' do
+          desc = IB::Vertical.the_description(@spread)
+          expect(desc).to include('Vertical')
+        end
+      end
+
+      context 'with nil last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: nil, expiry: '20241220', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: nil, expiry: '20241220', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'uses expiry when last_trading_day is nil' do
+          desc = IB::Vertical.the_description(@spread)
+          expect(desc).to include('Vertical')
+          expect(desc).to include('20241220')
+        end
+      end
+    end
+  end
+
+  describe IB::Calendar do
+    describe '.fabricate' do
+      context 'with hash argument for expiry' do
+        before do
+          merged_option = call_option.merge(expiry: '20250320')
+          allow(call_option).to receive(:verify).and_return([call_option])
+          allow(call_option).to receive(:merge).and_return(merged_option)
+          allow(merged_option).to receive(:verify).and_return([merged_option])
+          allow(merged_option).to receive(:essential).and_return(merged_option)
+          allow(call_option).to receive(:essential).and_return(call_option)
+          allow(call_option).to receive(:exchange).and_return('SMART')
+          allow(call_option).to receive(:symbol).and_return('AAPL')
+          allow(call_option).to receive(:currency).and_return('USD')
+          allow(call_option).to receive(:sec_type).and_return(:option)
+          allow(IB::Spread).to receive(:transform_distance).and_return('20250320')
+        end
+
+        it 'extracts expiry from hash values' do
+          spread = IB::Calendar.fabricate(call_option, expiry: { front: '20250320' })
+          expect(spread).to be_an(IB::Spread)
+        end
+      end
+
+      context 'when second leg verification fails' do
+        before do
+          merged_option = call_option.merge(expiry: '20250320')
+          allow(call_option).to receive(:verify).and_return([call_option])
+          allow(call_option).to receive(:merge).and_return(merged_option)
+          allow(merged_option).to receive(:verify).and_return([nil])
+          allow(call_option).to receive(:essential).and_return(call_option)
+          allow(call_option).to receive(:exchange).and_return('SMART')
+          allow(call_option).to receive(:symbol).and_return('AAPL')
+          allow(call_option).to receive(:currency).and_return('USD')
+          allow(call_option).to receive(:sec_type).and_return(:option)
+          allow(IB::Spread).to receive(:transform_distance).and_return('20250320')
+        end
+
+        it 'raises error when second leg verification fails' do
+          expect {
+            IB::Calendar.fabricate(call_option, '20250320')
+          }.to raise_error(IB::Error, /Verification of second leg failed/)
+        end
+      end
+    end
+
+    describe '.build' do
+      context 'with non-option underlying and missing strike' do
+        before do
+          allow(stock).to receive(:is_a?).with(IB::Option).and_return(false)
+        end
+
+        it 'raises error when strike is missing for non-option underlying' do
+          expect {
+            IB::Calendar.build(from: stock, front: '20241220', back: '20250320', strike: nil)
+          }.to raise_error(IB::Error, /missing essential parameter.*strike/)
+        end
+      end
+    end
+
+    describe '.the_description' do
+      context 'with future leg' do
+        before do
+          future_leg = IB::Future.new(symbol: 'ES', exchange: 'GLOBEX', currency: 'USD', expiry: '20241220')
+          spread = IB::Spread.new(symbol: 'ES', currency: 'USD', exchange: 'GLOBEX')
+          spread.add_leg future_leg, action: :buy
+          spread.add_leg future_leg.merge(expiry: '20250320'), action: :sell
+          @spread = spread
+        end
+
+        it 'formats description with Future type' do
+          desc = IB::Calendar.the_description(@spread)
+          expect(desc).to include('Calendar')
+          expect(desc).to include('Future')
+        end
+      end
+
+      context 'with missing last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: nil, expiry: '20241220', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: nil, expiry: '20241220', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'uses expiry when last_trading_day is missing' do
+          desc = IB::Calendar.the_description(@spread)
+          expect(desc).to include('Calendar')
+        end
+      end
+
+      context 'with invalid last_trading_day' do
+        before do
+          merged_put = put_option.merge(last_trading_day: 'invalid', expiry: '20241220', strike: 145, right: :put)
+          merged_call = call_option.merge(last_trading_day: 'invalid', expiry: '20241220', strike: 155, right: :call)
+          spread = IB::Spread.new(symbol: 'AAPL', currency: 'USD', exchange: 'SMART')
+          spread.add_leg merged_put
+          spread.add_leg merged_call
+          @spread = spread
+        end
+
+        it 'uses expiry when last_trading_day parsing fails' do
+          desc = IB::Calendar.the_description(@spread)
+          expect(desc).to include('Calendar')
         end
       end
     end

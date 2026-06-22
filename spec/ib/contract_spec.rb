@@ -138,12 +138,110 @@ describe IB::Contract do
       c = IB::Contract.new(expiry: '20251220', last_trading_day: '20251219-16:00')
       expect(c.expiry).to eq('2025121916:00')
     end
+
+    it 'returns @attributes[:expiry] when last_trading_day is absent' do
+      c = IB::Contract.new(expiry: '20251220')
+      expect(c.expiry).to eq('20251220')
+    end
   end
 
   describe '#time_zone' do
     it 'returns currency-based timezone' do
       expect(IB::Contract.new(currency: 'EUR').time_zone).to eq('MET')
       expect(IB::Contract.new(currency: 'USD').time_zone).to eq('US/Eastern')
+    end
+
+    it 'returns Australia/NSW for AUD currency' do
+      expect(IB::Contract.new(currency: 'AUD').time_zone).to eq('Australia/NSW')
+    end
+
+    it 'returns UTC for unknown currency' do
+      expect(IB::Contract.new(currency: 'XYZ').time_zone).to eq('UTC')
+    end
+
+    it 'returns contract_detail time_zone when present' do
+      c = IB::Contract.new(currency: 'USD')
+      detail = IB::ContractDetail.new(time_zone: 'America/New_York')
+      allow(c).to receive(:contract_detail).and_return(detail)
+      expect(c.time_zone).to eq('America/New_York')
+    end
+  end
+
+  describe '#table_header' do
+    it 'returns default headers without block' do
+      headers = contract.table_header
+      expect(headers).to include('symbol')
+      expect(headers.first).to eq('')
+    end
+
+    it 'yields self when block given' do
+      yielded_contract = nil
+      headers = contract.table_header { |c| yielded_contract = c; 'Custom' }
+      expect(yielded_contract).to eq(contract)
+      expect(headers.first).to eq('Custom')
+    end
+  end
+
+  describe '#serialize' do
+    context 'option strike handling' do
+      let(:option_base) do
+        {
+          symbol: 'AAPL',
+          sec_type: :option,
+          expiry: '20251220',
+          right: :call,
+          exchange: 'SMART',
+          currency: 'USD'
+        }
+      end
+
+      it 'returns positive strike as-is' do
+        option = IB::Option.new(option_base.merge(strike: 150.0))
+        result = option.serialize_short
+        expect(result).to include(150.0)
+      end
+
+      it 'returns 0 for zero strike' do
+        option = IB::Option.new(option_base.merge(strike: 0))
+        result = option.serialize_short
+        expect(result).to include("")
+      end
+
+      it 'returns 0 for negative strike' do
+        option = IB::Option.new(option_base.merge(strike: -1))
+        result = option.serialize_short
+        expect(result).to include(0)
+      end
+
+      it 'returns empty string when strike is nil' do
+        option = IB::Option.new(option_base.merge(strike: nil))
+        result = option.serialize_short
+        expect(result).to include("")
+      end
+    end
+  end
+
+  describe '#==' do
+    it 'matches by con_id' do
+      other = IB::Contract.new(con_id: 123)
+      expect(contract).to eq(other)
+    end
+
+    it 'matches by attributes' do
+      other = IB::Contract.new(symbol: 'AAPL', sec_type: :stock, exchange: 'SMART')
+      expect(contract).to eq(other)
+    end
+
+    it 'considers contracts equal when one has zero attribute value' do
+      c1 = IB::Contract.new(symbol: 'AAPL', sec_type: :stock, exchange: 'SMART', con_id: 0)
+      c2 = IB::Contract.new(symbol: 'AAPL', sec_type: :stock, exchange: 'SMART', multiplier: 0)
+      expect(c1).to eq(c2)
+    end
+
+    it 'considers contracts different when both have non-zero different values' do
+      c1 = IB::Contract.new(symbol: 'AAPL', sec_type: :stock, exchange: 'SMART', currency: 'USD', con_id: 1)
+      c2 = IB::Contract.new(symbol: 'AAPL', sec_type: :stock, exchange: 'SMART', currency: 'EUR', con_id: 2)
+      expect(c1).not_to eq(c2)
     end
   end
 

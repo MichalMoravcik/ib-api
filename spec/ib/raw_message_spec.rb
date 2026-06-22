@@ -176,4 +176,35 @@ RSpec.describe IB::RawMessageParser do
     parser = IB::RawMessageParser.new(socket)
     expect { parser.each { |msg| } }.to raise_error(StandardError, /invalid last byte/)
   end
+
+  it 'returns no messages when data is too short for header' do
+    socket = double
+    allow(socket).to receive(:recvfrom).and_return(array_msg(''), BAD_MSG)
+    parser = IB::RawMessageParser.new(socket)
+    counter = 0
+    parser.each { |msg| counter += 1 }
+    expect(counter).to eq(0)
+  end
+
+  it 'raises error when message footer last byte is nil' do
+    socket = double
+    allow(socket).to receive(:recvfrom).and_return(array_msg("\x00\x00\x00\x00\x00"), BAD_MSG)
+    parser = IB::RawMessageParser.new(socket)
+    expect { parser.each { |msg| } }.to raise_error(StandardError, /Could not validate last byte/)
+  end
+
+  it 'next_msg_length returns 0 when data is empty' do
+    socket = double
+    parser = IB::RawMessageParser.new(socket)
+    parser.instance_variable_set(:@data, '')
+    expect(parser.send(:next_msg_length)).to eq(0)
+  end
+
+  it 'remove_message sets empty data when there are no leftovers' do
+    socket = double
+    parser = IB::RawMessageParser.new(socket)
+    parser.instance_variable_set(:@data, "\x00\x00\x00\x05\x00")
+    parser.send(:remove_message)
+    expect(parser.instance_variable_get(:@data)).to eq('')
+  end
 end

@@ -211,4 +211,78 @@ RSpec.describe IB do
       expect(IB::PROPS[:open_close]).to include(:set)
     end
   end
+
+  describe "PROPS :side setter" do
+    let(:order) { IB::Order.new }
+
+    it "sets 'B' for buy" do
+      order.side = :buy
+      expect(order[:side]).to eq('B')
+    end
+
+    it "sets 'S' for sell" do
+      order.side = :sell
+      expect(order[:side]).to eq('S')
+    end
+
+    it "sets 'T' for short" do
+      order.side = :short
+      expect(order[:side]).to eq('T')
+    end
+
+    it "sets 'X' for short_exempt" do
+      order.side = :short_exempt
+      expect(order[:side]).to eq('X')
+    end
+
+    it "handles uppercase strings" do
+      order.side = 'BUY'
+      expect(order[:side]).to eq('B')
+    end
+
+    it "returns nil for unknown side" do
+      order.side = :unknown
+      expect(order[:side]).to be_nil
+    end
+  end
+
+  describe "PROPS :open_close setter" do
+    let(:order) { IB::Order.new }
+
+    it "sets 0 for same" do
+      order.open_close = :same
+      expect(order[:open_close]).to eq(0)
+    end
+
+    it "sets 1 for open" do
+      order.open_close = :open
+      expect(order[:open_close]).to eq(1)
+    end
+
+    it "sets 2 for close" do
+      order.open_close = :close
+      expect(order[:open_close]).to eq(2)
+    end
+
+    it "sets 3 for unknown" do
+      order.open_close = :unknown
+      expect(order[:open_close]).to eq(3)
+    end
+
+    it "handles string inputs" do
+      order.open_close = 'S'
+      expect(order[:open_close]).to eq(0)
+      order.open_close = 'O'
+      expect(order[:open_close]).to eq(1)
+      order.open_close = 'C'
+      expect(order[:open_close]).to eq(2)
+      order.open_close = 'U'
+      expect(order[:open_close]).to eq(3)
+    end
+
+    it "returns nil for unrecognized input" do
+      order.open_close = :foo
+      expect(order[:open_close]).to be_nil
+    end
+  end
 end

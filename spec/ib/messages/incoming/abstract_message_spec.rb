@@ -1,13 +1,58 @@
 require 'main_helper'
 
-## use a Message_id far beyond those defined by the tws
-
 RSpec.shared_examples_for "simple_instruction" do
   it { is_expected.to be_a IB::Messages::Incoming::AbstractMessage }
   its( :message_id ) { is_expected.to eq 1000 }
   its( :version )    { is_expected.to eq 1 }
   its( :data )       { is_expected.not_to  be_empty }
   its( :buffer  )    { is_expected.to be_empty }
+end
+
+
+RSpec.describe IB::Messages::Incoming::AbstractMessage do
+
+  describe '#check_version' do
+    let(:message_class) do
+      Class.new(IB::Messages::Incoming::AbstractMessage) do
+        @message_id = 9999
+        @version = 5
+      end
+    end
+
+    context 'when actual version matches expected version' do
+      subject { message_class.new({}) }
+
+      it 'does not raise error' do
+        expect { subject.check_version(5, 5) }.not_to raise_error
+      end
+    end
+
+    context 'when actual version is in expected array' do
+      subject { message_class.new({}) }
+
+      it 'does not raise error' do
+        expect { subject.check_version(3, [1, 2, 3, 4]) }.not_to raise_error
+      end
+    end
+
+    context 'when actual version does not match' do
+      subject { message_class.new({}) }
+
+      it 'logs error via error handler' do
+        expect { subject.check_version(10, 5) }.to raise_error(IB::Error, /Unsupported version/)
+      end
+    end
+  end
+
+  describe '#valid?' do
+    context 'with empty buffer' do
+      subject { IB::Messages::Incoming::Alert.new(version: 2, error_id: 1, code: 500, message: 'test') }
+
+      it 'returns true' do
+        expect(subject.valid?).to be true
+      end
+    end
+  end
 end
 
 
@@ -191,4 +236,93 @@ RSpec.describe IB::Messages::Incoming   do
         its(:the_hash){ is_expected.to be_nil }
       end
     end
+
+  describe '#load_map' do
+    let(:test_class) do
+      Class.new(IB::Messages::Incoming::AbstractMessage) do
+        @message_id = 1000
+        @version = 1
+        @data_map = []
+      end
+    end
+
+    it 'handles Integer version condition (satisfied)' do
+      msg = test_class.new(['1', 'world'])
+      msg.load_map([1, [:cond_field, :string]])
+      expect(msg.data[:cond_field]).to eq('world')
+    end
+
+    it 'handles Integer version condition (not satisfied)' do
+      msg = test_class.new(['1', 'skipped'])
+      msg.load_map([2, [:skip_field, :string]])
+      expect(msg.data).not_to have_key(:skip_field)
+    end
+
+    it 'handles Proc condition (true)' do
+      msg = test_class.new(['1', 'procval'])
+      msg.load_map([proc { true }, [:proc_field, :string]])
+      expect(msg.data[:proc_field]).to eq('procval')
+    end
+
+    it 'handles Proc condition (false)' do
+      msg = test_class.new(['1', 'noval'])
+      msg.load_map([proc { false }, [:no_field, :string]])
+      expect(msg.data).not_to have_key(:no_field)
+    end
+
+    it 'handles true precondition' do
+      msg = test_class.new(['1', 'trueval'])
+      msg.load_map([true, [:true_field, :string]])
+      expect(msg.data[:true_field]).to eq('trueval')
+    end
+
+    it 'handles false precondition' do
+      msg = test_class.new(['1', 'falseval'])
+      msg.load_map([false, [:false_field, :string]])
+      expect(msg.data).not_to have_key(:false_field)
+    end
+
+    it 'handles nil precondition' do
+      msg = test_class.new(['1', 'nilval'])
+      msg.load_map([nil, [:nil_field, :string]])
+      expect(msg.data).not_to have_key(:nil_field)
+    end
+
+    it 'handles grouped fields' do
+      msg = test_class.new(['1', 'groupval'])
+      msg.load_map([:group_name, :grouped_field, :string])
+      expect(msg.data[:group_name][:grouped_field]).to eq('groupval')
+    end
+
+    it 'raises error on unrecognized instruction' do
+      msg = test_class.new(['1'])
+      expect { msg.load_map(['bad', 'instruction']) }.to raise_error(IB::Error, /Unrecognized instruction/)
+    end
+
+    it 'handles read error gracefully' do
+      msg = test_class.new(['1'])
+      expect { msg.load_map([:bad_field, :nonexistent_type]) }.to raise_error(IB::TransmissionError, /Reading/)
+    end
+
+    it 'handles version zero class load' do
+      zclass = Class.new(IB::Messages::Incoming::AbstractMessage) do
+        @message_id = 1000
+        @version = 0
+        @data_map = []
+      end
+      msg = zclass.new(['zeroval'])
+      expect(msg.version).to be_nil
+      msg.load_map([:zero_field, :string])
+      expect(msg.data[:zero_field]).to eq('zeroval')
+    end
+
+    it 'handles simple_load rescue path' do
+      bad_class = Class.new(IB::Messages::Incoming::AbstractMessage) do
+        @message_id = 1000
+        @version = 0
+        @data_map = [['bad', 'instruction']]
+      end
+      expect { bad_class.new(['1']) }.to raise_error(IB::LoadError, /Unrecognized instruction/)
+    end
+  end
 end

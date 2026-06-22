@@ -245,5 +245,177 @@ RSpec.describe IB::Socket do
         }.to raise_error(Errno::ECONNRESET)
       end
     end
+
+    describe '#initialising_handshake error handling' do
+      it 'raises error when write_data fails' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@written_data, [])
+          s.instance_variable_set(:@error_on_write, true)
+
+          s.define_singleton_method(:syswrite) do |data|
+            raise Errno::ECONNREFUSED, "Connection refused" if @error_on_write
+            @written_data << data
+            data.bytesize
+          end
+
+          expect {
+            s.initialising_handshake
+          }.to raise_error(Errno::ECONNREFUSED)
+        end
+      end
+    end
+
+    describe '#read_string edge cases' do
+      it 'handles nil from first gets call (enters until loop)' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@mock_gets_returns, [nil, "final_value\n"])
+          s.instance_variable_set(:@call_count, 0)
+
+          s.define_singleton_method(:gets) do |*|
+            @call_count ||= 0
+            @call_count += 1
+            @mock_gets_returns[@call_count - 1]
+          end
+
+          result = s.read_string
+          expect(result).to eq('final_value')
+          expect(s.instance_variable_get(:@call_count)).to eq(2)
+        end
+      end
+
+      it 'handles multiple nil gets calls before success' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@mock_gets_returns, [nil, nil, nil, "success\n"])
+          s.instance_variable_set(:@call_count, 0)
+
+          s.define_singleton_method(:gets) do |*|
+            @call_count ||= 0
+            @call_count += 1
+            @mock_gets_returns[@call_count - 1]
+          end
+
+          result = s.read_string
+          expect(result).to eq('success')
+          expect(s.instance_variable_get(:@call_count)).to eq(4)
+        end
+      end
+    end
+
+    describe '#write_data error handling' do
+      it 'raises Errno::ENOTCONN when socket is not connected' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@written_data, [])
+
+          s.define_singleton_method(:syswrite) do |data|
+            raise Errno::ENOTCONN, "Socket is not connected"
+          end
+
+          expect {
+            s.write_data("test\0")
+          }.to raise_error(Errno::ENOTCONN)
+        end
+      end
+
+      it 'raises Errno::EINTR when operation is interrupted' do
+        original_socket_class.allocate.tap do |s|
+          s.define_singleton_method(:syswrite) do |data|
+            raise Errno::EINTR, "Interrupted"
+          end
+
+          expect {
+            s.write_data("test\0")
+          }.to raise_error(Errno::EINTR)
+        end
+      end
+
+      it 'raises IOError when stream is closed' do
+        original_socket_class.allocate.tap do |s|
+          s.define_singleton_method(:syswrite) do |data|
+            raise IOError, "closed stream"
+          end
+
+          expect {
+            s.write_data("test\0")
+          }.to raise_error(IOError)
+        end
+      end
+    end
+
+    describe '#send_messages error handling' do
+      it 'rescues ECONNRESET and does not raise' do
+        original_socket_class.allocate.tap do |s|
+          s.define_singleton_method(:prepare_message) do |data|
+            data.flatten.join("\0") + "\0"
+          end
+
+          s.define_singleton_method(:syswrite) do |data|
+            raise Errno::ECONNRESET, "Connection reset by peer"
+          end
+
+          IB::Connection.logger = ::Logger.new(File::NULL)
+          expect {
+            s.send_messages("a", "b", "c")
+          }.not_to raise_error
+        end
+      end
+    end
+
+    describe '#receive_messages error handling' do
+      it 'logs fatal and exits when recvfrom raises ECONNRESET' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@mock_recvfrom_data, [])
+          s.instance_variable_set(:@call_count, 0)
+
+          s.define_singleton_method(:recvfrom) do |len|
+            @call_count ||= 0
+            @call_count += 1
+            raise Errno::ECONNRESET, "Connection reset by peer"
+          end
+
+          expect(IB::Connection.logger).to receive(:fatal).at_least(:once)
+          expect(Kernel).to receive(:exit)
+
+          s.receive_messages
+        end
+      end
+
+      it 'handles empty buffer in loop' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@mock_recvfrom_data, ["data"])
+
+          s.define_singleton_method(:recvfrom) do |len|
+            if @mock_recvfrom_data.empty?
+              ['', []]
+            else
+              [@mock_recvfrom_data.shift, []]
+            end
+          end
+
+          result = s.receive_messages
+          expect(result).to eq('data')
+        end
+      end
+
+      it 'continues reading until buffer size < 8192' do
+        original_socket_class.allocate.tap do |s|
+          s.instance_variable_set(:@mock_recvfrom_data, ["x" * 8192, "y" * 8192, "z" * 100])
+          s.instance_variable_set(:@call_count, 0)
+
+          s.define_singleton_method(:recvfrom) do |len|
+            @call_count ||= 0
+            @call_count += 1
+            if @mock_recvfrom_data.empty?
+              ['', []]
+            else
+              [@mock_recvfrom_data.shift, []]
+            end
+          end
+
+          result = s.receive_messages
+          expect(result).to eq(("x" * 8192) + ("y" * 8192) + ("z" * 100))
+          expect(s.instance_variable_get(:@call_count)).to eq(4)
+        end
+      end
+    end
   end
 end

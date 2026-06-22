@@ -124,6 +124,14 @@ describe IB::PortfolioValue do
       expect(value.table_row[3][:value]).to eq(1.5)
     end
 
+    it 'uses 1 as divisor when multiplier is zero' do
+      value = IB::PortfolioValue.new(
+        contract: contract,
+        average_cost: 150.0
+      )
+      expect(value.table_row[3][:value]).to eq(150.0)
+    end
+
     it 'omits zero PnL values' do
       value = IB::PortfolioValue.new(
         contract: contract,
@@ -137,6 +145,20 @@ describe IB::PortfolioValue do
       row = value.table_row
       expect(row[6]).to eq('')
       expect(row[7]).to eq('')
+    end
+
+    it 'handles nil account' do
+      value = IB::PortfolioValue.new(
+        contract: contract,
+        position: 100,
+        market_price: 175.5,
+        market_value: 17550.0,
+        average_cost: 150.0,
+        unrealized_pnl: 0.0,
+        realized_pnl: 0.0
+      )
+      row = value.table_row
+      expect(row[0]).to eq('')
     end
   end
 end

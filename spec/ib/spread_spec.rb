@@ -47,6 +47,20 @@ RSpec.describe IB::Spread do
       spread = IB::Spread.new
       expect { spread.add_leg('not a contract') }.to raise_error(RuntimeError)
     end
+
+    it 'builds description from action and weight when no description given' do
+      spread = IB::Spread.new
+      spread.add_leg(stock_a)
+      expect(spread.description).to include('buy')
+      expect(spread.description).to include('AAPL')
+    end
+
+    it 'raises error when contract has no con_id' do
+      spread = IB::Spread.new
+      contract_no_id = IB::Contract.new(symbol: 'NOVALID')
+      contract_no_id.con_id = nil
+      expect { spread.add_leg(contract_no_id) }.to raise_error(RuntimeError, /no con_id/)
+    end
   end
 
   describe '#remove_leg' do
@@ -62,6 +76,24 @@ RSpec.describe IB::Spread do
     it 'raises for an invalid index' do
       spread = IB::Spread.new
       expect { spread.remove_leg(0) }.to raise_error(RuntimeError, /Invalid leg position/)
+    end
+
+    it 'raises for out-of-bounds index' do
+      spread = IB::Spread.new
+      spread.add_leg(stock_a)
+      expect { spread.remove_leg(5) }.to raise_error(RuntimeError, /Invalid leg position/)
+    end
+
+    it 'raises when contract cannot be verified' do
+      spread = IB::Spread.new
+      spread.add_leg(stock_a)
+      allow(stock_a).to receive(:verify).and_return([])
+      expect { spread.remove_leg(stock_a) }.to raise_error(RuntimeError, /Invalid Contract/)
+    end
+
+    it 'raises for invalid argument type' do
+      spread = IB::Spread.new
+      expect { spread.remove_leg([:array]) }.to raise_error(RuntimeError, /Specify a contract/)
     end
   end
 

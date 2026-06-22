@@ -394,5 +394,312 @@ describe IB::Order do
       order = IB::Order.new(total_quantity: 100, limit_price: 150.0)
       expect(order.to_human).to include('LMT')
     end
+
+    it 'renders to_s with mostly default values' do
+      order = IB::Order.new(total_quantity: 100, limit_price: 0, aux_price: nil)
+      result = order.to_s
+      expect(result).to include('Order')
+    end
+
+    it 'renders to_human with algo_strategy' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        algo_strategy: 'ArrivalPrice'
+      )
+      expect(order.to_human).to include('ArrivalPrice')
+    end
+
+    it 'renders to_human with reference_contract_id' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        reference_contract_id: 12345
+      )
+      expect(order.to_human).to include('benchmark con-id: 12345')
+    end
+
+    it 'renders to_human with volatility' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        volatility: 0.25
+      )
+      expect(order.to_human).to include('vola: 0.25')
+    end
+
+    it 'renders to_human with commission' do
+      order = IB::Order.new(total_quantity: 100, order_type: :limit)
+      order.order_state = IB::OrderState.new(commission: 1.50)
+      expect(order.to_human).to include('fee: 1.5')
+    end
+
+    it 'renders to_human with discretionary_amount' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        discretionary_amount: 5
+      )
+      expect(order.to_human).to include('dc: 5')
+    end
+
+    it 'renders table_row with algo_strategy' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        contract: IB::Stock.new(symbol: 'AAPL', exchange: 'SMART', currency: 'USD'),
+        algo_strategy: 'ArrivalPrice'
+      )
+      row = order.table_row
+      expect(row.last).to include('ArrivalPrice')
+    end
+
+    it 'renders table_row with reference_contract_id' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        contract: IB::Stock.new(symbol: 'AAPL', exchange: 'SMART', currency: 'USD'),
+        reference_contract_id: 12345
+      )
+      row = order.table_row
+      expect(row.last).to include('benchmark con-id: 12345')
+    end
+
+    it 'renders table_row with volatility' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        contract: IB::Stock.new(symbol: 'AAPL', exchange: 'SMART', currency: 'USD'),
+        volatility: 0.25
+      )
+      row = order.table_row
+      expect(row.last).to include('vola: 0.25')
+    end
+
+    it 'renders table_row with commission' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        contract: IB::Stock.new(symbol: 'AAPL', exchange: 'SMART', currency: 'USD')
+      )
+      order.order_state = IB::OrderState.new(commission: 1.50)
+      row = order.table_row
+      expect(row.last).to include('fee: 1.5')
+    end
+
+    it 'renders table_row with local_id' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        contract: IB::Stock.new(symbol: 'AAPL', exchange: 'SMART', currency: 'USD'),
+        local_id: 42
+      )
+      row = order.table_row
+      expect(row.last).to include('id: 42')
+    end
+
+    it 'renders table_row with discretionary_amount' do
+      order = IB::Order.new(
+        total_quantity: 100,
+        order_type: :limit,
+        contract: IB::Stock.new(symbol: 'AAPL', exchange: 'SMART', currency: 'USD'),
+        discretionary_amount: 5
+      )
+      row = order.table_row
+      expect(row.last).to include('dc: 5')
+    end
+  end
+
+  describe 'order_state=' do
+    it 'accepts IB::OrderState directly' do
+      order = IB::Order.new
+      state = IB::OrderState.new(status: 'Submitted')
+      order.order_state = state
+      expect(order.order_state).to eq(state)
+    end
+
+    it 'accepts Symbol and converts to OrderState' do
+      order = IB::Order.new
+      order.order_state = :submitted
+      expect(order.order_state).to be_a(IB::OrderState)
+      expect(order.order_state.status).to eq('submitted')
+    end
+
+    it 'accepts String and converts to OrderState' do
+      order = IB::Order.new
+      order.order_state = 'filled'
+      expect(order.order_state).to be_a(IB::OrderState)
+      expect(order.order_state.status).to eq('filled')
+    end
+  end
+
+  describe 'serialize_combo_legs' do
+    it 'returns empty array for non-bag contract' do
+      order = IB::Order.new
+      stock = IB::Stock.new(symbol: 'AAPL')
+      expect(order.serialize_combo_legs(stock)).to eq([])
+    end
+
+    it 'returns empty array for bag without legs' do
+      order = IB::Order.new
+      bag = IB::Bag.new
+      result = order.serialize_combo_legs(bag)
+      expect(result).to be_an(Array)
+    end
+
+    it 'includes leg_prices when bag has them' do
+      order = IB::Order.new(leg_prices: [1.0, 2.0])
+      bag = IB::Bag.new
+      result = order.serialize_combo_legs(bag)
+      expect(result.size).to eq(3)
+    end
+  end
+
+  describe 'serialize_main_order_fields' do
+    it 'uses fractional positions for newer server versions' do
+      order = IB::Order.new(
+        total_quantity: 100.5,
+        order_type: :limit,
+        side: :buy
+      )
+      allow(order).to receive(:server_version).and_return(KNOWN_SERVERS[:min_server_ver_fractional_positions] + 1)
+      result = order.serialize_main_order_fields
+      expect(result[1]).to eq(100.5.to_d)
+    end
+
+    it 'uses integer quantity for older server versions' do
+      order = IB::Order.new(
+        total_quantity: 100.5,
+        order_type: :limit,
+        side: :buy
+      )
+      allow(order).to receive(:server_version).and_return(KNOWN_SERVERS[:min_server_ver_fractional_positions] - 1)
+      result = order.serialize_main_order_fields
+      expect(result[1]).to eq(100)
+    end
+  end
+
+  describe 'serialize_delta_neutral_order_fields' do
+    it 'returns empty when delta_neutral_order_type is :none' do
+      order = IB::Order.new(delta_neutral_order_type: :none)
+      expect(order.serialize_delta_neutral_order_fields).to eq(['', ''])
+    end
+
+    it 'returns empty when delta_neutral_order_type is nil' do
+      order = IB::Order.new(delta_neutral_order_type: nil)
+      expect(order.serialize_delta_neutral_order_fields).to eq(['', ''])
+    end
+  end
+
+  describe 'serialize_scale_order_fields' do
+    it 'excludes extended fields when scale_price_increment is 0' do
+      order = IB::Order.new(
+        scale_init_level_size: 10,
+        scale_subs_level_size: 5,
+        scale_price_increment: 0
+      )
+      result = order.serialize_scale_order_fields
+      expect(result).to eq([10, 5, 0, '', '', ''])
+    end
+
+    it 'excludes extended fields when scale_price_increment is negative' do
+      order = IB::Order.new(
+        scale_init_level_size: 10,
+        scale_subs_level_size: 5,
+        scale_price_increment: -1
+      )
+      result = order.serialize_scale_order_fields
+      expect(result).to eq([10, 5, -1, '', '', ''])
+    end
+  end
+
+  describe 'serialize_pegged_order_fields' do
+    it 'returns empty when server version is below minimum' do
+      order = IB::Order.new(
+        order_type: :pegged_to_benchmark,
+        reference_contract_id: 123,
+        pegged_change_amount: 0.5
+      )
+      allow(order).to receive(:server_version).and_return(KNOWN_SERVERS[:min_server_ver_pegged_to_benchmark] - 1)
+      expect(order.serialize_pegged_order_fields).to eq([])
+    end
+  end
+
+  describe 'serialize_mifid_order_fields' do
+    it 'returns only decision_maker when server version is between decision_maker and mifid_execution' do
+      order = IB::Order.new(
+        mifid_2_decision_maker: 'DM',
+        mifid_2_decision_algo: 'ALGO1',
+        mifid_2_execution_maker: 'EM',
+        mifid_2_execution_algo: 'ALGO2'
+      )
+      # Server version between decision_maker (138) and mifid_execution (139)
+      allow(order).to receive(:server_version).and_return(138)
+      result = order.serialize_mifid_order_fields
+      expect(result).to eq([['DM', 'ALGO1']])
+    end
+
+    it 'returns empty array when server version is below decision_maker' do
+      order = IB::Order.new(
+        mifid_2_decision_maker: 'DM',
+        mifid_2_decision_algo: 'ALGO1'
+      )
+      allow(order).to receive(:server_version).and_return(KNOWN_SERVERS[:min_server_ver_decision_maker] - 1)
+      expect(order.serialize_mifid_order_fields).to eq([])
+    end
+  end
+
+  describe 'serialize_peg_best_and_mid' do
+    it 'sends mid offsets when compete_against_best_offset is nil for pegged_to_best' do
+      order = IB::Order.new(
+        order_type: :pegged_to_best,
+        contract: IB::Stock.new(symbol: 'AAPL'),
+        min_trade_qty: 10,
+        min_compete_size: 5,
+        compete_against_best_offset: nil,
+        mid_offset_at_whole: 0.05,
+        mid_offset_at_half: 0.025
+      )
+      allow(order).to receive(:server_version).and_return(KNOWN_SERVERS[:min_server_ver_pegbest_pegmid_offsets] + 1)
+      result = order.serialize_peg_best_and_mid
+      expect(result).to include(0.05, 0.025)
+    end
+  end
+
+  describe '==' do
+    it 'considers orders equal when perm_id matches' do
+      a = IB::Order.new(perm_id: 100, local_id: 1, client_id: 100)
+      b = IB::Order.new(perm_id: 100, local_id: 2, client_id: 200)
+      expect(a).to eq(b)
+    end
+
+    it 'considers orders equal when other client_id is 0' do
+      a = IB::Order.new(local_id: 1, client_id: 100, parent_id: 0, tif: :day, order_type: :limit, total_quantity: 100, limit_price: 10, aux_price: 0, origin: :customer, designated_location: '', exempt_code: -1, what_if: false, algo_strategy: '', algo_params: {})
+      b = IB::Order.new(local_id: 1, client_id: 0, parent_id: 0, tif: :day, order_type: :limit, total_quantity: 100, limit_price: 10, aux_price: 0, origin: :customer, designated_location: '', exempt_code: -1, what_if: false, algo_strategy: '', algo_params: {})
+      expect(a).to eq(b)
+    end
+
+    it 'considers orders equal when self client_id is 0' do
+      a = IB::Order.new(local_id: 1, client_id: 0, parent_id: 0, tif: :day, order_type: :limit, total_quantity: 100, limit_price: 10, aux_price: 0, origin: :customer, designated_location: '', exempt_code: -1, what_if: false, algo_strategy: '', algo_params: {})
+      b = IB::Order.new(local_id: 1, client_id: 100, parent_id: 0, tif: :day, order_type: :limit, total_quantity: 100, limit_price: 10, aux_price: 0, origin: :customer, designated_location: '', exempt_code: -1, what_if: false, algo_strategy: '', algo_params: {})
+      expect(a).to eq(b)
+    end
+  end
+
+  describe 'serialize_rabbit' do
+    it 'works without contract' do
+      order = IB::Order.new
+      result = order.serialize_rabbit
+      expect(result).to have_key('Contract')
+      expect(result['Contract']).to eq('')
+      expect(result).to have_key('Order')
+      expect(result).to have_key('OrderState')
+    end
+
+    it 'includes contract data when present' do
+      order = IB::Order.new(contract: IB::Stock.new(symbol: 'AAPL'))
+      result = order.serialize_rabbit
+      expect(result['Contract']).not_to eq('')
+    end
   end
 end
