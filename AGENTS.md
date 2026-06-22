@@ -1,268 +1,122 @@
-# IB API - Development Guidelines
+# IB API — Agent Notes
 
-This document provides guidelines for development and maintenance of the `ib-api` Ruby gem, a wrapper for Interactive Brokers' TWS API.
+Compact, repo-specific guidance for working on the `ib-api` Ruby gem.
 
-## Table of Contents
+## Build / Test / Run
 
-- [Build/Lint/Test Commands](#buildlinttest-commands)
-- [Code Style Guidelines](#code-style-guidelines)
-  - [Imports and Dependencies](#imports-and-dependencies)
-  - [Formatting](#formatting)
-  - [Naming Conventions](#naming-conventions)
-  - [Error Handling](#error-handling)
-  - [Testing](#testing)
+- **Install deps**: `bundle install`
+- **Run unit tests** (no TWS required):
+  - `bundle exec rspec`
+  - `bundle exec rake spec`
+  - `bundle exec guard` — continuous test runner
+- **Run integration tests** (requires live TWS/IB Gateway, configured in `spec/spec.yml`):
+  - `TEST_ENV=real bundle exec rspec --tag integration`
+  - `rake integration`
+- **Run a single example**: `bundle exec rspec spec/path/to/file_spec.rb -e "example name"`
+- **Console** (requires `bin/console.yml`):
+  - `bin/console g` — connect to Gateway (default)
+  - `bin/console t` — connect to TWS
+- **Gem build/publish**: `bundle exec rake build|install|release`
+  - Note: gemspec file is `api.gemspec`, gem name is `ib-api`.
+- **No linter/formatter is configured** — there is no RuboCop, StandardRB, or similar tool in the repo.
 
-## Build/Lint/Test Commands
+## Test Suite Tags & Filters
 
-### Running Tests
+`spec/spec_helper.rb` and `Rakefile` exclude these unless explicitly enabled:
 
-- **Run all tests**:
-  ```bash
-  bundle exec rspec
-  # or
-  bundle exec rake spec
-  ```
+| Tag | Enabled when |
+|-----|--------------|
+| `:integration` | `TEST_ENV=real` |
+| `:connected` | `TEST_ENV=real` |
+| `:slow` | `SLOW_TESTS=true` |
+| `:focus` | `fit`/`fdescribe` present, or `config.filter_run_when_matching focus: true` |
+| `:reuters` | No global enable; used by `spec/ib/integration/fundamental_data_spec.rb` |
 
-- **Run a specific test file**:
-  ```bash
-  bundle exec rspec spec/path/to/file_spec.rb
-  ```
+The default `rake spec`/`bundle exec rspec` run is unit-test only with `--tag ~integration --tag ~connected --tag ~slow`.
 
-- **Run a specific test (context/describe block)**:
-  ```bash
-  bundle exec rspec spec/path/to/file_spec.rb -e "context name"
-  ```
+## Code Loading Architecture (Zeitwerk)
 
-- **Run tests with Guard (auto-run on file changes)**:
-  ```bash
-  bundle exec guard
-  ```
+Entry point is `lib/ib-api.rb`. It uses `Zeitwerk::Loader.for_gem` and pushes two extra root dirs:
 
-- **Run individual test methods**:
-  Use the `-e` flag with the example description:
-  ```bash
-  bundle exec rspec spec/path/to/file_spec.rb -e "should do something"
-  ```
+- `models/` → e.g. `models/ib/stock.rb` becomes `IB::Stock`
+- `conditions/` → e.g. `conditions/ib/price_condition.rb` becomes `IB::PriceCondition`
 
-### Development Setup
+Files **ignored by Zeitwerk** and loaded manually or not at all:
 
-1. Install dependencies:
-   ```bash
-   bundle install
-   ```
+- `lib/server_versions.rb`
+- `lib/ib-api.rb` itself
+- `lib/ib/contract.rb` — reopened after loader setup
+- `lib/ib/order_condition.rb` — reopened after loader setup
+- `lib/ib/constants.rb`, `lib/ib/errors.rb`
+- `lib/ib/messages/outgoing/old-place-order.rb`
+- `lib/ib/messages/outgoing/new-place-order.rb`
 
-2. Run interactive console:
-   ```bash
-   bin/console
-   ```
+Custom inflections:
 
-3. Run tests continuously with Guard:
-   ```bash
-   bundle exec guard
-   ```
+- `ib` → `IB`
+- `receive_fa` → `ReceiveFA`
+- `tick_efp` → `TickEFP`
 
-## Code Style Guidelines
+`lib/ib/contract.rb` reopens `IB::Contract` to add the `Subclasses` hash used by `IB::Contract.build` to return the right subclass (`IB::Stock`, `IB::Option`, etc.) based on `sec_type`.
 
-### Imports and Dependencies
+## Models & Base Classes
 
-1. **Require structure**:
-   - Use `require` for core dependencies at the top of files
-   - Place `require "zeitwerk"` before ActiveSupport calls
-   - Group requires by category (stdlib, gems, local files)
+- All tableless models inherit from `IB::Base` (`lib/ib/base.rb`), which uses `ActiveModel::Validations`, `ActiveModel::Serialization`, and JSON serialization.
+- Properties are declared via the `prop` macro from `IB::BaseProperties` (`lib/ib/base_properties.rb`).
+- `IB::Base#default_attributes` usually seeds `:created_at`.
+- `Object#error` is patched globally in `lib/ib/errors.rb` with typed errors (`:standard`, `:args`, `:symbol`, `:load`, `:reader`, `:verify`). Code generally calls `error "msg", :type` instead of plain `raise`.
+- `lib/class_extensions.rb` monkey-patches core classes: `String#to_bool`, `Numeric#to_bool`, `Date#to_ib`, `Time#to_ib`, `Array#as_table`, etc.
 
-2. **Zeitwerk loader**:
-   - Use Zeitwerk for automatic loading in `lib/ib-api.rb`
-   - Explicitly ignore files that should not be auto-loaded
-   - Configure inflections for class name transformations
+## Message System
 
-3. **Common imports**:
-   ```ruby
-   require "zeitwerk"
-   require "active_model"
-   require 'active_support/concern'
-   require 'bigdecimal/util'   # provides .to_d for numeric and string classes
-   ```
+- `lib/ib/messages.rb` defines `def_message(message_id_version, *data_map, &to_human)`.
+- `message_id_version` is `[id, version]` or just `id` (version defaults to 1).
+- Incoming messages live in `lib/ib/messages/incoming/` and extend `IB::Messages::Incoming::AbstractMessage`.
+- Outgoing messages live in `lib/ib/messages/outgoing/` and extend `IB::Messages::Outgoing::AbstractMessage`.
+- Data maps use these forms:
+  - `[name, type]` — simple field
+  - `[group, name, type]` — grouped field, stored as `@data[:group][:name]`
+  - `[version_condition, ...]` — conditional fields based on received version
+- Incoming messages are looked up at runtime via `IB::Messages::Incoming::Classes[id]`.
+- TWS field decoding uses `IB::Support` refinements (`lib/ib/support.rb`) on `Array` (`read_int`, `read_decimal`, `read_string`, `read_xml`, etc.).
 
-### Formatting
+## Plugins
 
-1. **Indentation**: Use 2 spaces (no tabs)
-2. **Line length**: Keep lines under 80-100 characters
-3. **String quotes**: Prefer single quotes for strings, double quotes only when needed for interpolation
-4. **Method chaining**: Chain methods with newlines and consistent indentation:
-   ```ruby
-   result = some_object
-     .method_one
-     .method_two(argument)
-     .method_three
-   ```
+- Located in `plugins/ib/`.
+- Activated through `IB::Connection#activate_plugin` (`lib/ib/plugins.rb`).
+- **Naming gotcha**: underscores are converted to dashes. Use either:
+  - `activate_plugin :connection_tools` → loads `plugins/ib/connection-tools.rb`
+  - `activate_plugin "managed-accounts"` → loads `plugins/ib/managed-accounts.rb`
+- Plugins are modules that extend `IB::Connection`; they often depend on workflow state transitions.
+- `Connection` uses the `workflow` gem with states: `virgin`, `lean_mode`, `gateway_mode`, `ready`, `account_based_operations`, `account_based_orderflow`. Several plugins drive transitions (e.g. `managed-accounts`, `process-orders`).
 
-5. **Hash syntax**: Use the new Ruby 1.9 hash syntax:
-   ```ruby
-   # Good
-   { key: value, other_key: 'value' }
-   
-   # Avoid
-   { :key => value, :other_key => 'value' }
-   ```
+## Test Infrastructure
 
-### Naming Conventions
+- `spec/spec_helper.rb` loads `simplecov` first, then `ib-api`, then patches the socket stub, then loads mocks and factories.
+- `spec/support/socket_patch.rb` replaces `IB::Socket` with `IB::SocketStub` and intercepts `Kernel.select` unless `TEST_ENV=real`.
+- `spec/support/factories.rb` exposes `IB::Test::Factory` with helpers like `Factory.create(:stock, ...)`.
+- `spec/spec.yml` stores connection/account/sample-stock config. Set `:account` to your paper account before integration tests.
+- Shared helpers: `spec/main_helper.rb` (connection stubs, log helpers), `spec/model_helper.rb` (property/validation shared examples), `spec/account_helper.rb`, `spec/contract_helper.rb`, `spec/order_helper.rb`, `spec/combo_helper.rb`, `spec/integration_helper.rb`.
 
-1. **Classes and Modules**: Use PascalCase (CamelCase)
-   ```ruby
-   module IB
-     class Contract
-       # ...
-     end
-   end
-   ```
+## Coverage Exclusions (`.simplecov`)
 
-2. **Methods and Variables**: Use snake_case
-   ```ruby
-   def place_order(order, contract)
-     local_id = connection.place_order(order, contract)
-     # ...
-   end
-   ```
+Excluded from coverage reports:
 
-3. **Constants**: Use UPPER_SNAKE_CASE
-   ```ruby
-   VALUES = { sec_type: {...} }
-   ```
+- `/spec/`, `/bin/`, `/lib/ib/version.rb`
+- Legacy outgoing messages: `old-place-order.rb`, `new-place-order.rb`
+- Empty file: `plugins/ib/auto-adjust.rb`
+- Plugins requiring live market/TWS: `eod.rb`, `market-price.rb`, `greeks.rb`, `option-chain.rb`, `advanced-account.rb`, `probability-of-expiring.rb`
 
-4. **Boolean methods**: Prefix with question mark for predicates:
-   ```ruby
-   def valid?
-     errors.empty?
-   end
-   ```
+## Files to Treat as Historical / Do Not Rely On
 
-5. **Destructive methods**: Suffix with exclamation mark:
-   ```ruby
-   def clear_received(message_type = nil)
-     # ...
-   end
-   ```
+- `.travis.yml` targets Ruby 2.6.1 and bundler 1.17.2; it is stale.
+- `lib/ib/messages/outgoing/old-place-order.rb` and `new-place-order.rb` exist on disk but are ignored by Zeitwerk and SimpleCov.
+- `models/ib/` is tracked and actively loaded alongside `lib/ib/`; do not assume it is dead code.
 
-### Error Handling
+## Console & Runtime Defaults
 
-1. **Custom errors**: Define in `lib/ib/errors.rb`
-2. **Validation patterns**: Use ActiveModel validations
-   ```ruby
-   validates :symbol, presence: true
-   validates :expiry, format: { with: /\d{6}/, message: "should be YYYYMM" }
-   ```
-
-3. **Error messages**: Use descriptive error strings:
-   ```ruby
-   validates_each :sec_type do |record, attr, value|
-     record.errors.add(attr, "should be valid security type") unless IB::VALUES[:sec_type].key?(value.to_sym)
-   end
-   ```
-
-4. **Exception handling**: Use specific exception classes:
-   ```ruby
-   def verify(*symbols)
-     symbols.flatten.each do |symbol|
-       raise IB::VerifyError, "Something went wrong" unless valid?
-     end
-   end
-   ```
-
-### Testing
-
-1. **Test structure**: Use RSpec with shared examples
-   ```ruby
-   describe IB::Stock do
-     before(:all) { establish_connection }
-     after(:all) { close_connection }
-     
-     describe "Equality of Stock Contracts" do
-       Given(:msft) { IB::Symbols::Stocks.msft }
-       Then { msft.is_a? IB::Stock }
-     end
-   end
-   ```
-
-2. **Shared examples**: Define reusable test patterns in `spec/*_helper.rb`
-   ```ruby
-   RSpec.shared_examples_for 'Valid Model' do
-     it 'validates' do
-       subject.should be_valid
-       subject.errors.should be_empty
-     end
-   end
-   ```
-
-3. **Test organization**:
-   - Place tests in `spec/` directory matching lib structure
-   - Use `spec/spec_helper.rb` for test configuration
-   - Configure connection settings in `spec/spec.yml`
-
-4. **Integration tests**: Use helper methods for common patterns:
-   ```ruby
-   def place_the_order(contract: IB::Symbols::Stocks.wfc)
-     order = yield(get_contract_price(contract: contract))
-     IB::Connection.current.place_order(order, contract)
-   end
-   ```
-
-### Model Development
-
-1. **Base class**: Extend `IB::Base` for new models:
-   ```ruby
-   module IB
-     class Contract < Base
-       # ...
-     end
-   end
-   ```
-
-2. **Property definitions**: Use the `prop` macro:
-   ```ruby
-   prop :symbol, :local_symbol,
-        :exchange, :currency,
-        :primary_exchange, :sec_type
-   ```
-
-3. **Validation patterns**: Validate properties with options:
-   ```ruby
-   prop :expiry, validate: { 
-     format: { with: /\d{6}|\d{8}/, message: "should be YYYYMM or YYYYMMDD" }
-   }
-   ```
-
-4. **Default values**: Use `default_attributes` method:
-   ```ruby
-   def default_attributes
-     { created_at: Time.now }
-   end
-   ```
-
-### Message Handling
-
-1. **Incoming messages**: Extend `IB::Messages::Incoming::AbstractMessage`
-2. **Outgoing messages**: Extend `IB::Messages::Outgoing::AbstractMessage`
-3. **Message parsing**: Use Ox for XML parsing when needed
-
-### Plugins
-
-1. **Plugin structure**: Create in `plugins/` directory
-2. **Activation**: Use `activate_plugin` method:
-   ```ruby
-   ib = IB::Connection.current
-   ib.activate_plugin 'verify'
-   ```
-
-## Additional Notes
-
-1. **Code conventions**: Follow Rails/ActiveModel conventions where possible
-2. **Type safety**: Use BigDecimal for financial values, Time/DateTime for timestamps
-3. **Immutability**: Avoid modifying objects after creation when possible
-4. **Documentation**: Use RDoc-style comments for public APIs
-5. **Encoding values**: Use the `VALUES` and `CODES` constants for enumerated properties:
-   ```ruby
-   VALUES[:sec_type] = {
-     stock: 'STK',
-     option: 'OPT'
-   }
-   ```
+- `bin/console` and `bin/simple` read `bin/console.yml`. If the file is missing, the YAML load will fail.
+- Default connection targets in `bin/console.yml`:
+  - Gateway: `localhost:4002`
+  - TWS: `tws:7496`
+  - Default `client_id`: `2000`
