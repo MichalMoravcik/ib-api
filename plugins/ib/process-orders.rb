@@ -131,14 +131,15 @@ The order is identified by local_id and perm_id
 Everything is carried out in a mutex-synchonized environment
 =end
   def update_order_dependent_object order_dependent_object  # :nodoc:
-   account_data  do  | a |
+    account_data do |a|
       order = if order_dependent_object.local_id.present?
                 a.locate_order local_id: order_dependent_object.local_id
               else
                 a.locate_order perm_id: order_dependent_object.perm_id
               end
-      yield order if order.present?
+      return yield order if order.present?
     end
+    nil
   end
 
 
