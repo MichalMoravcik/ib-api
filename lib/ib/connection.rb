@@ -389,7 +389,7 @@ module IB
     if select [socket], nil, nil, time_left
             #  Peek at the message from the socket; if it's blank then the
             #  server side of connection (TWS) has likely shut down.
-            socket_likely_shutdown = socket.recvmsg(100, ::Socket::MSG_PEEK)[0] == ""
+            socket_likely_shutdown = socket.recvmsg(100, ::Socket::MSG_PEEK)&.first == ""
             # We go ahead process messages regardless (a no-op if socket_likely_shutdown).
             process_message
             # After processing, if socket has shut down we sleep for 100ms
