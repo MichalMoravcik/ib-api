@@ -45,6 +45,13 @@ describe IB::RawMessageParser do
       allow(mock_socket).to receive(:recvfrom).with(4096).and_return([''])
       expect { |b| parser.each(&b) }.not_to yield_control
     end
+
+    it 'raises TransmissionError when recvfrom returns nil' do
+      allow(mock_socket).to receive(:recvfrom).with(4096).and_return(nil)
+      expect { parser.each { |msg| msg } }
+        .to raise_error(IB::TransmissionError, /IB Gateway closed connection/)
+    end
+
   end
 
   describe '#valid_data?' do

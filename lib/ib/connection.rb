@@ -168,7 +168,9 @@ module IB
 #      socket.decode_message( socket.receive_messages ) do  | the_message |
                 #puts "TheMessage :: #{the_message.inspect}" 
         @server_version =  the_message.shift.to_i.freeze
-        error "ServerVersion does not match  #{@server_version} <--> #{MAX_CLIENT_VER}" if @server_version != MAX_CLIENT_VER
+        unless @server_version.between?(MIN_CLIENT_VER, MAX_CLIENT_VER)
+          error "ServerVersion does not match  #{@server_version} <--> #{MIN_CLIENT_VER}..#{MAX_CLIENT_VER}", :reader
+        end
 
         @remote_connect_time = DateTime.parse the_message.shift.freeze
         @local_connect_time = Time.now.freeze
@@ -187,11 +189,11 @@ module IB
                  "#{@local_connect_time} local, " +
                  "#{@remote_connect_time} remote." }
       start_reader
-    rescue IB::TransmissionError =>e
-      logger.fatal "Transmission Error: Retrying establishing the connection"
-      logger.fatal  e.msg
-      disconnect!
-       try_connection!
+    rescue IB::TransmissionError => e
+      logger.fatal "Transmission Error: establishing the connection failed"
+      logger.fatal  e.message
+      socket&.close
+      raise e
     #  update_next_order_id
     end
 
