@@ -1,0 +1,18 @@
+# Orca worktree setup hooks for this project
+# Runs automatically when Orca creates a new worktree (--setup run).
+# Reference: https://www.onorca.dev/docs/model/worktrees
+
+scripts:
+  setup: |
+    set -e
+
+    # Regenerate the graphify code graph for this worktree's code.
+    # graphify-out/ is gitignored, so new worktrees start without it.
+    # graphify update . builds it from the worktree's own source (AST-only, no API cost).
+    # The graph helps coding agents navigate the codebase via graphify query/path/explain.
+    if command -v graphify &>/dev/null; then
+      echo "[orca setup] Building graphify code graph..."
+      graphify update . || echo "[orca setup] graphify update failed (non-fatal)"
+    else
+      echo "[orca setup] graphify not found in PATH — skipping graph build"
+    fi

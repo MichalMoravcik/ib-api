@@ -55,3 +55,7 @@ build-iPhoneSimulator/
 # Opencode / OMO planning artifacts
 .omo/
 .opencode/
+
+# graphify generated code graph (rebuild per-worktree via orca.yaml)
+graphify-out/
+.codegraph
