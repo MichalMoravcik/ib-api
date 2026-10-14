@@ -74,7 +74,10 @@ module IB
     end
 
     def append_new_data
-      @data += @socket.recvfrom(4096)[0]
+      chunk = @socket.recvfrom(4096)&.first
+      raise IB::TransmissionError, "IB Gateway closed connection" if chunk.nil?
+
+      @data += chunk
     end
 
     def validate_message_footer(msg, _length)

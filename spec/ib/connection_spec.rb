@@ -280,6 +280,65 @@ describe  IB::Connection do
         .to raise_error(IB::TransmissionError, 'broken')
     end
   end
+
+  describe 'V100 handshake server version validation' do
+    let(:ib) { IB::Connection.new }
+    let(:stub_socket) { IB::SocketStub.new }
+
+    def add_server_version_message(socket, version, time = Time.now.utc.iso8601)
+      payload = [version.to_s, time].join("\0") + "\0"
+      socket.add_message([payload.bytesize].pack('N') + payload)
+    end
+
+    before do
+      allow(IB::Socket).to receive(:open).and_return(stub_socket)
+    end
+
+    after do
+      ib.instance_variable_set(:@reader_running, false)
+      ib.instance_variable_get(:@reader_thread)&.kill
+    end
+
+    it 'accepts server version 176 within the supported range' do
+      add_server_version_message(stub_socket, 176)
+      ib.try_connection!
+      expect(ib.server_version).to eq(176)
+      expect(ib.connected?).to be true
+    end
+
+    it 'rejects server version below MIN_CLIENT_VER' do
+      add_server_version_message(stub_socket, 50)
+      expect { ib.try_connection! }
+        .to raise_error(IB::TransmissionError, /ServerVersion does not match/)
+    end
+
+    it 'rejects server version above MAX_CLIENT_VER' do
+      add_server_version_message(stub_socket, 200)
+      expect { ib.try_connection! }
+        .to raise_error(IB::TransmissionError, /ServerVersion does not match/)
+    end
+  end
+
+  describe 'handshake error handling' do
+    let(:ib) { IB::Connection.new }
+    let(:stub_socket) { IB::SocketStub.new }
+
+    before do
+      allow(IB::Socket).to receive(:open).and_return(stub_socket)
+    end
+
+    it 'logs the error message and re-raises the TransmissionError' do
+      parser = double('parser')
+      allow(parser).to receive(:each).and_raise(IB::TransmissionError, 'gateway closed connection')
+      allow(IB::RawMessageParser).to receive(:new).and_return(parser)
+
+      expect(stub_socket).to receive(:close)
+
+      expect { ib.try_connection! }
+        .to raise_error(IB::TransmissionError, 'gateway closed connection')
+    end
+  end
+
 end
 
 describe "Connection tests" do
